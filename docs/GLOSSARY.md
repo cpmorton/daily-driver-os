@@ -154,14 +154,11 @@ upstream source on 2026-09-23; the ecosystem moves fast, so the
   users. [decision 0008](decisions/0008-homed-users-on-a-separate-partition.md)
 
 **Seed stick, `DDSEED`**
-: A FAT32/exFAT volume carrying one machine's hostname, localadmin hash and
-  users, imported once at first boot and then deleted.
-  [decision 0018](decisions/0018-provisioning-seed-stick.md)
-
-**systemd credentials, `/run/credstore`**
-: systemd's way to hand secrets to one service without environment variables
-  or disk files. The seed importer stages `home.create.<user>` credentials in
-  RAM for homed.
+: A FAT32/exFAT volume carrying one machine's hostname, its daily users'
+  names and home sizes, and optional files for their homes; never passwords.
+  Imported once at first boot and then deleted.
+  [decision 0018](decisions/0018-provisioning-seed-stick.md),
+  [decision 0019](decisions/0019-no-seeded-passwords.md)
 
 **bootupd, static GRUB config**
 : bootc's bootloader updater. Its GRUB menu is a fixed file that never scans

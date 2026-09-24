@@ -1,9 +1,18 @@
 # 0018. Provisioning: a generic installer plus a per-machine seed stick
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [0019](0019-no-seeded-passwords.md)
 - **Date:** 2026-09-23
 - **Amends:** [0005](0005-accounts-and-access.md) (localadmin's password and
   UID), [0002](0002-public-and-secret-free.md) (where secrets live)
+
+## Amendments
+
+- 2026-09-23, [0019](0019-no-seeded-passwords.md): the seed carries **no
+  passwords**. localadmin's and every daily user's password are typed on the
+  console at first boot; user records are rebuilt from `userName`, `realName`
+  and `diskSize` only. Read the Decision below with that in mind: the hash,
+  `secret.password`, `passwordChangeNow`, `/run/credstore` and
+  `homectl firstboot` parts no longer apply.
 
 ## Context
 

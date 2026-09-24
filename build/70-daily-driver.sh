@@ -13,8 +13,8 @@ set -xeuo pipefail
 #   1. /opt, /usr/local, /root become real, image-owned directories
 #   2. Chrome, VS Code, gh, chezmoi, systemd-homed, and the Docker-compatible
 #      front end to rootless podman (podman-docker, podman-compose)
-#   3. root locked; first boot: seed stick import, then localadmin's
-#      password and the daily users (from the seed, or asked on tty1)
+#   3. root locked; first boot: seed stick import (never passwords), then
+#      localadmin's password and the daily users, typed on tty1
 #   4. PAM: homed + pam_access (localadmin: local logins only)
 #   5. rootful podman off, rootless per-user socket on
 #   6. assertions: fail the build rather than ship a missing control
@@ -102,8 +102,8 @@ echo "::group:: Accounts"
 passwd -l root
 
 # localadmin: sysusers.d creates it (UID 1000), locked, at boot. Its password
-# comes from the DDSEED stick, or is asked on tty1 before GDM starts, so no
-# hash ever enters the image. Daily users: from the seed, or asked on tty1.
+# is asked on tty1 before GDM starts, so no hash ever enters the image or a
+# seed stick. Daily users: names from the seed or tty1, passwords on tty1.
 chmod 0755 /usr/libexec/daily-driver/*
 systemctl enable localadmin-home.service
 systemctl enable daily-driver-seed.service

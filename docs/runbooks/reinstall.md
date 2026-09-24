@@ -7,7 +7,7 @@ Linux needed anywhere; everything is prepared on Windows.
 | You need | For |
 | --- | --- |
 | **Installer stick**, 8 GB+ | The generic installer ISO. Erased when written; reusable for every machine. |
-| **Seed stick** (optional), any size | This machine's hostname, localadmin password hash, and users. [seed-stick.md](seed-stick.md). |
+| **Seed stick** (optional), any size | This machine's hostname, user names and files for their homes; no passwords. [seed-stick.md](seed-stick.md). |
 | 100 GB+ of free disk space | Linux plus the encrypted homes. |
 
 ## 1. Prepare Windows (admin PowerShell, once per machine)
@@ -58,10 +58,10 @@ image release.
 1. If you made a seed stick, plug it in now.
 2. Boot. The menu lists this OS first and **Windows Boot Manager** second
    (the Windows entry appears from the second boot on).
-3. Before the login screen, the console either imports the seed silently, or
-   asks for localadmin's password and then the first user(s). Details:
-   [first-boot.md](first-boot.md).
-4. Remove the seed stick; it no longer holds any secrets.
+3. Before the login screen, the console imports the seed (if any), then asks
+   for localadmin's password, then each daily user's. Stay at the keyboard.
+   Details: [first-boot.md](first-boot.md).
+4. Remove the seed stick; first boot deleted the seed from it.
 
 ## Reinstall
 

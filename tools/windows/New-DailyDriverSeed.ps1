@@ -8,24 +8,22 @@
   person-specific part to a separate FAT32/exFAT volume labelled DDSEED, which
   the installed system imports once, at first boot, and then deletes:
 
-    daily-driver-seed\seed.json          hostname, localadmin password hash
-    daily-driver-seed\users\<name>.json  one encrypted-home user record each
+    daily-driver-seed\seed.json          hostname
+    daily-driver-seed\users\<name>.json  one daily user: name, full name, home size
     daily-driver-seed\skel\<name>\...    optional files for that user's home
 
-  Run it once per machine with -Hostname and -LocalAdminHash, and once per
-  daily user with -User. Runs on Windows PowerShell 5.1; nothing to install.
+  Run it once per machine with -Hostname, and once per daily user with -User.
+  Runs on Windows PowerShell 5.1; nothing to install.
 
-  The stick holds each user's initial password in plain text until first boot
-  (systemd-homed needs it to create the encrypted home), so keep it with you.
-  Users must change it at first login unless -NoPasswordChange is given.
+  No passwords go on the stick. At first boot the console asks for
+  localadmin's password, then each user's (docs/decisions/0019).
 
 .EXAMPLE
   # Once: format the stick and set the machine-wide values.
-  .\New-DailyDriverSeed.ps1 -Drive E: -Format -Hostname chris-laptop `
-      -LocalAdminHash (Get-Content .\localadmin.hash)
+  .\New-DailyDriverSeed.ps1 -Drive E: -Format -Hostname chris-laptop
 
 .EXAMPLE
-  # Then one run per daily user; asks for the initial password.
+  # Then one run per daily user.
   .\New-DailyDriverSeed.ps1 -Drive E: -User chris -RealName 'Chris' -HomeSizeGB 200 `
       -SkelPath C:\seed\chris
 
@@ -51,10 +49,6 @@ param(
     [ValidatePattern('^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$')]
     [string] $Hostname,
 
-    # yescrypt ($y$...) or SHA-512 ($6$...) crypt hash, from your secret store.
-    [ValidatePattern('^\$(y|6)\$')]
-    [string] $LocalAdminHash,
-
     # Folder copied into localadmin's home.
     [string] $LocalAdminSkelPath,
 
@@ -67,10 +61,7 @@ param(
     [int] $HomeSizeGB = 100,
 
     # Folder copied into the user's new encrypted home.
-    [string] $SkelPath,
-
-    # Don't force a password change at first login.
-    [switch] $NoPasswordChange
+    [string] $SkelPath
 )
 
 Set-StrictMode -Version 2.0
@@ -83,22 +74,10 @@ function Write-JsonFile([string] $File, $Object) {
     [System.IO.File]::WriteAllText($File, $json + "`n", (New-Object System.Text.UTF8Encoding $false))
 }
 
-function Read-InitialPassword([string] $Name) {
-    while ($true) {
-        $a = Read-Host -AsSecureString "Initial password for $Name"
-        $b = Read-Host -AsSecureString "Repeat it"
-        $pa = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($a))
-        $pb = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($b))
-        if ($pa -ne $pb) { Write-Warning 'They differ; try again.'; continue }
-        if ($pa.Length -lt 8) { Write-Warning 'Use at least 8 characters.'; continue }
-        return $pa
-    }
+if (-not $Hostname -and -not $LocalAdminSkelPath -and -not $User) {
+    throw 'Nothing to do: give -Hostname for the machine, and/or -User for a daily user.'
 }
-
-if (-not $Hostname -and -not $LocalAdminHash -and -not $LocalAdminSkelPath -and -not $User) {
-    throw 'Nothing to do: give -Hostname/-LocalAdminHash for the machine, and/or -User for a daily user.'
-}
-if ($User -eq 'localadmin') { throw 'localadmin is set with -LocalAdminHash, not -User.' }
+if ($User -eq 'localadmin') { throw 'localadmin is not a daily user; its files go in -LocalAdminSkelPath.' }
 
 # --- Find (or make) the seed volume ------------------------------------------
 if ($PSCmdlet.ParameterSetName -eq 'Drive') {
@@ -129,13 +108,29 @@ $config = [ordered]@{ version = 1 }
 if (Test-Path $configFile) {
     $existing = Get-Content -Raw -Path $configFile | ConvertFrom-Json
     if ($existing.PSObject.Properties['hostname']) { $config.hostname = $existing.hostname }
+    # A stick made by an older version of this script may hold a password hash.
     if ($existing.PSObject.Properties['localadmin']) {
-        $config.localadmin = [ordered]@{ hashedPassword = $existing.localadmin.hashedPassword }
+        Write-Warning 'Removing the localadmin password hash an older version of this script wrote.'
+        Write-JsonFile $configFile $config
     }
 }
-if ($Hostname) { $config.hostname = $Hostname }
-if ($LocalAdminHash) { $config.localadmin = [ordered]@{ hashedPassword = $LocalAdminHash.Trim() } }
-if ($Hostname -or $LocalAdminHash) { Write-JsonFile $configFile $config }
+if ($Hostname) {
+    $config.hostname = $Hostname
+    Write-JsonFile $configFile $config
+}
+
+# Same for user records holding a plaintext initial password: keep only the
+# fields first boot reads.
+foreach ($file in @(Get-ChildItem -Path $users -Filter *.json)) {
+    $old = Get-Content -Raw -Path $file.FullName | ConvertFrom-Json
+    if ($old.PSObject.Properties['secret']) {
+        Write-Warning "Removing the stored password from $($file.Name)."
+        $clean = [ordered]@{ userName = $old.userName }
+        if ($old.PSObject.Properties['realName']) { $clean.realName = $old.realName }
+        if ($old.PSObject.Properties['diskSize']) { $clean.diskSize = [int64]$old.diskSize }
+        Write-JsonFile $file.FullName $clean
+    }
+}
 
 if ($LocalAdminSkelPath) {
     $dest = [System.IO.Path]::Combine($skel, 'localadmin')
@@ -145,17 +140,12 @@ if ($LocalAdminSkelPath) {
 
 # --- One daily user ---------------------------------------------------------
 if ($User) {
-    $password = Read-InitialPassword $User
     $record = [ordered]@{
-        userName          = $User
-        realName          = $(if ($RealName) { $RealName } else { $User })
-        storage           = 'luks'
-        diskSize          = [int64]$HomeSizeGB * 1GB
-        passwordChangeNow = -not [bool]$NoPasswordChange
-        secret            = [ordered]@{ password = @($password) }
+        userName = $User
+        realName = $(if ($RealName) { $RealName } else { $User })
+        diskSize = [int64]$HomeSizeGB * 1GB
     }
     Write-JsonFile ([System.IO.Path]::Combine($users, "$User.json")) $record
-    Remove-Variable password
     if ($SkelPath) {
         $dest = [System.IO.Path]::Combine($skel, $User)
         New-Item -ItemType Directory -Force -Path $dest | Out-Null
@@ -169,13 +159,11 @@ Write-Host "Seed on ${root}:"
 if (Test-Path $configFile) {
     $c = Get-Content -Raw $configFile | ConvertFrom-Json
     $h = if ($c.PSObject.Properties['hostname']) { $c.hostname } else { '(installer default)' }
-    $l = if ($c.PSObject.Properties['localadmin']) { 'from seed' } else { 'asked on screen at first boot' }
-    Write-Host "  hostname:            $h"
-    Write-Host "  localadmin password: $l"
+    Write-Host "  hostname:     $h"
 }
 $names = @(Get-ChildItem -Path $users -Filter *.json | ForEach-Object { $_.BaseName })
-if ($names.Count) { Write-Host "  daily users:         $($names -join ', ')" }
-else { Write-Host '  daily users:         none; asked on screen at first boot' }
+if ($names.Count) { Write-Host "  daily users:  $($names -join ', ')" }
+else { Write-Host '  daily users:  none; asked on screen at first boot' }
 Write-Host ''
-Write-Host 'Keep this stick with you: it holds initial passwords in plain text until'
-Write-Host 'first boot, which imports it and deletes them.'
+Write-Host 'Passwords are typed on screen at first boot, never stored here. First boot'
+Write-Host 'imports this seed and deletes it; until then, guard any files in skel\.'

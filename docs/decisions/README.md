@@ -8,10 +8,10 @@ supersede a record with a new one and mark the old one's status.
 | # | Decision | Status |
 | --- | --- | --- |
 | 0001 | [Assemble the image with finpilot, not by deriving from Bluefin](0001-assemble-with-finpilot.md) | Accepted |
-| 0002 | [Public repository and public image; nothing secret](0002-public-and-secret-free.md) | Accepted, amended by 0018 |
+| 0002 | [Public repository and public image; nothing secret](0002-public-and-secret-free.md) | Accepted, amended by 0018, 0019 |
 | 0003 | [Two repositories: the image and the dotfiles](0003-two-repositories.md) | Accepted |
 | 0004 | [Where software and configuration go](0004-where-software-goes.md) | Accepted |
-| 0005 | [Accounts: root locked, localadmin local-only, no password in the image](0005-accounts-and-access.md) | Accepted, amended by 0018 |
+| 0005 | [Accounts: root locked, localadmin local-only, no password in the image](0005-accounts-and-access.md) | Accepted, amended by 0018, 0019 |
 | 0006 | [Rootless podman only; the Docker CLI runs podman](0006-rootless-podman-only.md) | Accepted |
 | 0007 | [Developer experience baked into the image; no devmode](0007-developer-experience-baked-in.md) | Accepted |
 | 0008 | [Daily users are systemd-homed LUKS homes on a separate partition](0008-homed-users-on-a-separate-partition.md) | Superseded by 0017 |
@@ -24,7 +24,8 @@ supersede a record with a new one and mark the old one's status.
 | 0015 | [Leave upstream files alone; override from this image's phases](0015-leave-upstream-files-alone.md) | Accepted |
 | 0016 | [The installer ISO is built in CI; nobody needs Linux to install](0016-installer-built-in-ci.md) | Accepted, amended by 0017 |
 | 0017 | [Dual boot on the internal disk, beside Windows](0017-dual-boot-internal-disk.md) | Accepted |
-| 0018 | [Provisioning: a generic installer plus a per-machine seed stick](0018-provisioning-seed-stick.md) | Accepted |
+| 0018 | [Provisioning: a generic installer plus a per-machine seed stick](0018-provisioning-seed-stick.md) | Accepted, amended by 0019 |
+| 0019 | [Passwords are typed at first boot, never seeded](0019-no-seeded-passwords.md) | Accepted |
 
 ## Template
 

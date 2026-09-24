@@ -6,6 +6,7 @@
 ## Amendments
 
 - 2026-09-23, [0018](0018-provisioning-seed-stick.md): localadmin is UID 1000, not 1999, and its password comes from the seed stick's hash when one is present (tty1 prompt otherwise). The access rules below are unchanged.
+- 2026-09-23, [0019](0019-no-seeded-passwords.md): no seeded hash after all; localadmin's password is always typed on tty1 at first boot. No SSH key either.
 
 ## Context
 

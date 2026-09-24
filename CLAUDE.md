@@ -24,11 +24,12 @@ the way they are; check there before "fixing" something deliberate.
 - **`/opt`, `/usr/local` and `/root` are real directories.** Never reintroduce
   upstream's `/opt -> /var/opt` symlink. Nothing may write into `/root` during
   the build.
-- **Seeds are secrets.** Never commit a `daily-driver-seed/` folder or a
-  localadmin hash, even a test one that looks real.
+- **No seeded passwords.** Passwords are typed at first boot, never carried
+  by a seed stick (decision 0019). Never commit a `daily-driver-seed/` folder
+  or a password hash, even a test one that looks real.
 - **Access model.** Root stays locked. localadmin stays local-only (pam_access +
-  sshd). Rootful podman stays masked. Changing any of these needs the user's
-  explicit say-so.
+  sshd), with no SSH key. Rootful podman stays masked. Changing any of these
+  needs the user's explicit say-so.
 
 ## Documentation is part of the change
 

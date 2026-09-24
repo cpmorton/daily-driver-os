@@ -1,57 +1,85 @@
 #!/usr/bin/bash
-# Create the first daily users, once, before the login screen.
-#   - Seeded users: `homectl firstboot` creates one encrypted home per
-#     home.create.<name> credential that seed-import staged.
-#   - No seed: ask on the console, one user at a time.
-# Either way, every homed user gets subordinate IDs for rootless podman.
-# See docs/decisions/0018-provisioning-seed-stick.md.
+# Create the first daily users, once, on the console before the login screen.
+#   - Seeded users: one per record seed-import staged in /run/daily-driver/users
+#     (name, full name, home size; never a password).
+#   - No seed: ask for each user's details here.
+# Either way the password is typed here, twice: homed derives the home's
+# encryption key from it, so nothing else ever holds it. Every homed user then
+# gets subordinate IDs for rootless podman.
+# See docs/decisions/0018-provisioning-seed-stick.md and
+# docs/decisions/0019-no-seeded-passwords.md.
 set -euo pipefail
 
 readonly NAME_RE='^[a-z_][a-z0-9_-]{0,31}$'
-ROOT="${USERS_ROOT:-}" # test seam: prefixes every path this script writes
+ROOT="${USERS_ROOT:-}" # test seam: prefixes every path this script reads or writes
 LIBEXEC="${LIBEXEC:-/usr/libexec/daily-driver}"
+readonly STAGE="${ROOT}/run/daily-driver/users"
+
+# Prints "yes" when someone other than the user is typing the password, so the
+# user must replace it at first login. Default: the user is at the keyboard.
+change_at_login() {
+	local answer
+	read -rp "Is $1 at the keyboard to choose their own password? [Y/n] " answer
+	if [[ "${answer}" =~ ^[Nn] ]]; then echo yes; else echo no; fi
+}
+
+# homectl create, repeated until it succeeds. It asks for the password itself,
+# twice, and again if the password is too weak.
+create() {
+	local name=$1
+	shift
+	echo "Type ${name}'s password. It encrypts their home; localadmin can't recover it."
+	until homectl create "$@"; do
+		read -rp "Creating ${name} failed. Press Enter to try again. " _
+	done
+	echo "Created ${name}."
+}
+
+echo
+echo "=== Daily user accounts ==="
+echo "Each account's home is encrypted with its own password;"
+echo "localadmin can't open it."
 
 seeded=0
-if [[ -n "${CREDENTIALS_DIRECTORY:-}" ]] && compgen -G "${CREDENTIALS_DIRECTORY}/home.create.*" >/dev/null; then
+for record in "${STAGE}"/*.json; do
+	[[ -e "${record}" ]] || continue
 	seeded=1
-fi
+	name="$(jq -r .userName "${record}")"
+	echo
+	echo "--- ${name} ($(jq -r '.realName // .userName' "${record}"), $(jq -r '(.diskSize // 107374182400) / 1073741824 | floor' "${record}") GB home, from the seed stick)"
+	create "${name}" --identity="${record}" --password-change-now="$(change_at_login "${name}")"
+done
 
 if ((seeded)); then
-	# The documented first-boot path for home.create.* credentials. OVERRIDE=0
-	# turns its own interactive prompt off.
-	SYSTEMD_HOME_FIRSTBOOT_OVERRIDE=0 homectl firstboot
+	read -rp "Create another user now? [y/N] " again
+	[[ "${again}" =~ ^[Yy] ]] && more=1 || more=0
 elif [[ -z "$(homectl list --no-legend 2>/dev/null)" ]]; then
-	echo
-	echo "=== Create the first user account ==="
-	echo "Each account's home is encrypted with its own password;"
-	echo "localadmin can't open it."
-	while :; do
-		read -rp "Username (lowercase, e.g. chris): " name
-		if [[ ! "${name}" =~ ${NAME_RE} || "${name}" == localadmin ]]; then
-			echo "Not a valid new username."
-			continue
-		fi
-		read -rp "Full name: " real
-		read -rp "Home size in GB [100]: " size
-		size="${size:-100}"
-		if [[ ! "${size}" =~ ^[0-9]+$ ]]; then
-			echo "Size must be a whole number of GB."
-			continue
-		fi
-		# homectl asks for the password itself, twice.
-		if homectl create "${name}" --real-name="${real}" --storage=luks --disk-size="${size}G"; then
-			echo "Created ${name}."
-		else
-			echo "Creating ${name} failed; try again."
-			continue
-		fi
-		read -rp "Create another user? [y/N] " again
-		[[ "${again}" =~ ^[Yy] ]] || break
-	done
+	more=1
+else
+	more=0
 fi
 
+while ((more)); do
+	echo
+	read -rp "Username (lowercase, e.g. chris): " name
+	if [[ ! "${name}" =~ ${NAME_RE} || "${name}" == localadmin ]]; then
+		echo "Not a valid new username."
+		continue
+	fi
+	read -rp "Full name: " real
+	read -rp "Home size in GB [100]: " size
+	size="${size:-100}"
+	if [[ ! "${size}" =~ ^[0-9]+$ ]] || ((size < 10)); then
+		echo "Size must be a whole number of GB, 10 or more."
+		continue
+	fi
+	create "${name}" "${name}" --real-name="${real}" --storage=luks --disk-size="${size}G" \
+		--password-change-now="$(change_at_login "${name}")"
+	read -rp "Create another user? [y/N] " again
+	[[ "${again}" =~ ^[Yy] ]] || more=0
+done
+
 "${LIBEXEC}/ensure-subids"
-rm -f "${ROOT}"/run/credstore/home.create.* 2>/dev/null || true
-rm -rf "${ROOT}/run/daily-driver/skel" 2>/dev/null || true
+rm -rf "${STAGE}" "${ROOT}/run/daily-driver/skel" 2>/dev/null || true
 mkdir -p "${ROOT}/var/lib/daily-driver"
 touch "${ROOT}/var/lib/daily-driver/users-created"

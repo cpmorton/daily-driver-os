@@ -41,13 +41,13 @@ alongside upstream's `default.preinstall`.
 
 - **root**: password locked, in the image and in the installer kickstart.
 - **localadmin** (UID 1000, `wheel`): the administrator's account on every
-  machine, not the user's. Created by `sysusers.d`; its password comes from a
-  seed stick's hash or is typed on tty1 at first boot, never from this public
-  repository. Console, GDM, su, sudo and polkit only:
-  `pam_access` refuses it anywhere `PAM_RHOST` is set, and sshd denies it.
+  machine, not the user's. Created by `sysusers.d`; its password is typed on
+  tty1 at first boot, never stored in this repository or on a seed stick.
+  Console, GDM, su, sudo and polkit only: `pam_access` refuses it anywhere
+  `PAM_RHOST` is set, and sshd denies it. No SSH key.
 - **Daily users**: systemd-homed, each home its own LUKS-encrypted file that
-  localadmin can't open. Created at first boot from the seed stick, or asked
-  on screen. Not in `wheel`.
+  localadmin can't open. Created at first boot: names from the seed stick or
+  asked on screen, passwords always typed on screen. Not in `wheel`.
 
 ### Removed or disabled
 

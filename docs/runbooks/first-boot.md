@@ -1,25 +1,24 @@
 # First boot
 
 What happens before the login screen, in order, and what to do at each step.
+Someone has to be at the keyboard: every password is typed here
+([decision 0019](../decisions/0019-no-seeded-passwords.md)).
 
-## With a seed stick
+1. **Seed stick** (if one is plugged in). Imported silently: hostname,
+   user names, skel files. Then the seed is deleted from the stick.
+2. **localadmin's password.** The administrator types it, twice, not the
+   machine's user. Save it in the password manager. Weak passwords are
+   refused; it asks again.
+3. **Daily users.** For each user on the seed stick, or, with no stick, for
+   each user you enter (username, full name, home size in GB, default 100):
+   - *Is \<user\> at the keyboard to choose their own password?* Answer `Y`
+     (default) and let them type it. Answer `n` if you're typing an initial
+     password for them; they must choose a new one at their first login.
+   - The password, twice. It encrypts that user's home; localadmin can't open
+     or recover it.
+   - Then *Create another user?*
 
-Nothing to do. The machine imports the seed, sets the hostname and
-localadmin's password, creates each seeded user's encrypted home, deletes the
-seed from the stick, and shows the login screen. Each seeded user signs in
-with the initial password and must choose a new one (unless the seed said
-otherwise).
-
-## Without a seed (or a partial one)
-
-The console asks, on screen, before the login screen:
-
-1. **localadmin's password** (only if the seed didn't provide one). The
-   administrator types it, not the machine's user. Save it in the password
-   manager, then save its hash too: `ujust localadmin-hash` after first boot.
-2. **The first user** (only if the seed had no users): username, full name,
-   home size, then the password twice. That password encrypts the home;
-   localadmin can't open it. Answer `y` to add another user.
+The login screen appears once all users exist.
 
 ## After first boot (localadmin)
 

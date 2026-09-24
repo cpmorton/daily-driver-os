@@ -1,4 +1,5 @@
-# First boot, step 1: import a DDSEED provisioning stick if one is plugged in.
+# First boot, step 1: import a DDSEED provisioning stick if one is plugged in
+# (hostname, user names, skel files; never passwords).
 # Order: sysusers -> localadmin-home -> this -> localadmin-firstboot
 #        -> daily-driver-users -> login screen.
 # See docs/decisions/0018-provisioning-seed-stick.md.

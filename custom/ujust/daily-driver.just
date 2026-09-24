@@ -122,12 +122,3 @@ windows-entry:
         exit 1
     fi
     sudo /usr/libexec/daily-driver/windows-boot-entry
-
-# Print localadmin's password hash, for the secret store that seeds new machines.
-[group('Daily driver')]
-localadmin-hash:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # The hash is what the seed stick carries (never the password). Store it in
-    # your password manager; New-DailyDriverSeed.ps1 -LocalAdminHash takes it.
-    sudo getent shadow localadmin | cut -d: -f2

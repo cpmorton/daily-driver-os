@@ -1,6 +1,6 @@
-# First boot, step 3: create the daily users. Seeded users come from the
-# home.create.* credentials seed-import staged; with no seed, ask on tty1.
-# See docs/decisions/0018-provisioning-seed-stick.md.
+# First boot, step 3: create the daily users on tty1. Names and home sizes come
+# from the records seed-import staged, or are asked here; passwords are always
+# typed here. See docs/decisions/0019-no-seeded-passwords.md.
 [Unit]
 Description=Create the first daily users (first boot, tty1)
 ConditionPathExists=!/var/lib/daily-driver/users-created
@@ -12,7 +12,6 @@ Conflicts=getty@tty1.service
 [Service]
 Type=oneshot
 TimeoutStartSec=infinity
-ImportCredential=home.*
 ExecStartPre=-/usr/bin/plymouth quit
 ExecStartPre=-/usr/bin/chvt 1
 ExecStart=/usr/libexec/daily-driver/first-users
