@@ -1,60 +1,80 @@
-# finpilot
+# daily-driver-os
 
-A template for building your own bootc operating system image, assembled the
-same way Bluefin, Aurora, and Bluefin LTS are: from shared OCI layers rather
-than by modifying an existing image. The desktop configuration comes from
-[`projectbluefin/common`](https://github.com/projectbluefin/common), Homebrew
-from [`ublue-os/brew`](https://github.com/ublue-os/brew), and the rest is yours.
+My daily-driver workstation as a bootc image: Fedora Silverblue with Bluefin's
+shared layer (`projectbluefin/common`), built from the
+[finpilot](https://github.com/projectbluefin/finpilot) template and published to
+GHCR. Updating, rolling back or reinstalling the machine means moving between
+image digests; the image owns everything under `/usr`.
 
-It is built to be driven by hand or by an agent.
+What the image does **not** own: user state (the
+[`dotfiles`](https://github.com/OWNER/dotfiles) repository, applied with
+chezmoi), secrets (never in any repository), and account-side integrations
+(claude.ai connectors, GitHub, Google). [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+draws the line.
 
-> Be the one who moves, not the one who is moved.
+## What makes this raptor different
 
-## What Makes this Raptor Different?
+Based on `quay.io/fedora-ostree-desktops/silverblue:44` plus
+`projectbluefin/common` and `ublue-os/brew`, as upstream finpilot is.
 
-Here are the changes from [Base Image Name]. This image is based on
-[Bluefin/Bazzite/Aurora/etc] and includes these customizations:
+### Added packages (build time)
 
-### Added Packages (Build-time)
+- **Google Chrome** (`google-chrome-stable`), from Fedora's third-party repository
+- **Visual Studio Code**, from Microsoft's repository. The Dev Containers
+  extension installs on each user's first login.
+- **Claude Code CLI**, from Anthropic's signed dnf repository (stable channel),
+  with machine-wide guardrails in `/etc/claude-code/managed-settings.json`
+- **gh**, **chezmoi**, **podman-compose**, **systemd-homed**, from Fedora
 
-- List the packages you install at build time
+### Added applications (first boot, Flatpak)
 
-### Added Applications (Runtime)
+Signal, Discord, LibreOffice, Obsidian, GIMP and Podman Desktop (`custom/flatpaks/daily.preinstall`),
+alongside upstream's `default.preinstall`.
 
-- **CLI tools (Homebrew)**: list them
-- **GUI apps (Flatpak)**: list them
+### Accounts and access
 
-### Removed or Disabled
+- **root**: password locked, in the image and in the installer kickstart.
+- **localadmin** (UID 1999, `wheel`): the break-glass administrator. Created by
+  `sysusers.d`; its password is typed on tty1 at first boot, so no hash is ever
+  in this public repository. Console, GDM, su, sudo and polkit only:
+  `pam_access` refuses it anywhere `PAM_RHOST` is set, and sshd denies it.
+- **Daily users**: systemd-homed, LUKS-encrypted, on a separate internal
+  partition mounted at `/var/home`. Not in `wheel`.
 
-- List anything removed from the base image
+### Removed or disabled
 
-### Configuration Changes
+- Rootful podman: the system `podman.socket` that upstream enables is masked,
+  with the rest of the rootful units. Each user gets a rootless socket.
+- `debug-shell.service` (root shell on tty9) and `gnome-remote-desktop.service`
+  (system RDP authenticates through GDM) are masked.
+- Upstream's `/opt -> /var/opt` symlink: `/opt`, `/usr/local` and `/root` are
+  real, read-only, image-owned directories here.
 
-- Systemd services enabled or disabled
-- Desktop environment changes
-- Other notable modifications
+### Configuration changes
 
-_Last updated: [date]_
+- Journal is volatile (`Storage=volatile`): nothing persists across boots,
+  including the logs of a boot you rolled back from.
+- `/tmp` is tmpfs (asserted at build time).
+- VS Code uses rootless podman for devcontainers (set per user by the dotfiles).
+- The image rebuilds nightly, so baked-in RPMs pick up upstream releases.
 
-> This section is what tells your users how your image differs from its base.
-> Update it whenever you add or remove a package, app, or service.
+## Set up a machine
 
-## Quick start
+| Step | Where | Runbook |
+| --- | --- | --- |
+| Install onto the USB stick | installer ISO | [docs/runbooks/reinstall.md](docs/runbooks/reinstall.md) |
+| First boot: localadmin, home partition, daily user | console | [docs/runbooks/first-boot.md](docs/runbooks/first-boot.md) |
+| Update or roll back | any time | [docs/runbooks/upgrade.md](docs/runbooks/upgrade.md) |
+| Something broke | | [docs/runbooks/recover.md](docs/runbooks/recover.md) |
 
-1. **Create your repository** — "Use this template" on GitHub.
-2. **Rename the project.** The published name is your repository name. Three
-   files carry it as a literal, and `just test-contract` fails if they disagree:
+## Set up this repository on GitHub
 
-   - `Containerfile` — the `# Name:` comment and `ARG IMAGE_NAME`
-   - `Justfile` — the `IMAGE_NAME` default
-   - `artifacthub-repo.yml` — `repositoryID`
-
-   Grep for `finpilot` afterwards to catch the prose and the examples.
-3. **Finish setup.** [The `onboarding` skill](.agents/skills/onboarding/SKILL.md)
-   carries the rest — enabling Actions, auto-merge and workflow permissions, the
-   Renovate token, the `stable` branch, branch protection on both branches, and
-   the labels. Every step has a `gh` command and a GitHub-website route, and the
-   skill ends by auditing that each setting matches.
+The published name is the repository name; three files carry it as a literal
+and `just test-contract` fails if they disagree (`Containerfile` twice,
+`Justfile`). [The `onboarding` skill](.agents/skills/onboarding/SKILL.md) covers
+the rest: Actions, auto-merge, the Renovate token, the `stable` branch, branch
+protection and labels. Claude Code in this repository reads it through
+`.claude/skills` (see [CLAUDE.md](CLAUDE.md)).
 
 ## What's included
 
@@ -110,40 +130,26 @@ has moved past the commit the promotion PR was built from.
 
 ## Image signing
 
-Images are signed with keyless OIDC via Cosign and GitHub Actions. There is no
-key to generate or store.
+CI signs every image with keyless OIDC via Cosign; there is no key to manage.
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp="https://github.com/your-username/your-repo-name/.github/workflows/" \
+  --certificate-identity-regexp="https://github.com/OWNER/daily-driver-os/.github/workflows/" \
   --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-  ghcr.io/your-username/your-repo-name:stable
+  ghcr.io/OWNER/daily-driver-os:stable
 ```
 
 Unsigned images fail the promotion gate, so `main → stable` reports
 `release/blocked` until signing is restored.
 
-## Using your image
-
-Switch to a built image:
-
-```bash
-sudo bootc switch --transport registry ghcr.io/your-username/your-repo-name:stable-testing
-sudo systemctl reboot
-```
-
-Then, as your user:
-
-```bash
-ujust install-default-apps    # Homebrew: the default Brewfile
-ujust install-dev-tools       # Homebrew: the development Brewfile
-ujust configure-dev-groups    # add yourself to docker and libvirt
-ujust install-config          # re-apply the image defaults, backing up yours
-```
-
-First boot unpacks Homebrew and installs the declared Flatpaks; both need a
-network connection. Check them with `systemctl status brew-setup.service` and
-`systemctl status flatpak-preinstall.service`.
+> **The laptop does not enforce this signature.** `projectbluefin/common`'s
+> `/etc/containers/policy.json` accepts any `docker` registry it doesn't name,
+> and a keyless GitHub Actions identity can't be expressed there: the policy's
+> Fulcio matcher requires `subjectEmail`, and Actions certificates carry a
+> workflow URI instead. Enforced verification needs key-based signing plus a
+> `sigstoreSigned` entry for this repository, which is how `ghcr.io/ublue-os`
+> is configured. Until then, the trust anchors are TLS to GHCR and the GitHub
+> account.
 
 ## Local testing
 

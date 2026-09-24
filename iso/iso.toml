@@ -9,6 +9,9 @@
 contents = """
 # Interactive install. bootc-image-builder supplies the ostreecontainer payload
 # line and the bootc origin; everything else is chosen in Anaconda's interface.
+# Root stays locked; the image creates localadmin itself (sysusers.d) and asks
+# for its password on tty1 at first boot. Create no user in the installer.
+rootpw --lock
 """
 
 [customizations.installer.modules]

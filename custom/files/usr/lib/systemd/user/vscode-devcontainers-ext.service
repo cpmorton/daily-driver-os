@@ -1,0 +1,17 @@
+[Unit]
+Description=Install VS Code Dev Containers extension (once per user)
+ConditionPathExists=!%S/devcontainers-ext/done
+# First login can beat the network; retry rather than order on a system target
+StartLimitIntervalSec=1h
+StartLimitBurst=10
+
+[Service]
+Type=oneshot
+StateDirectory=devcontainers-ext
+ExecStart=/usr/bin/code --install-extension ms-vscode-remote.remote-containers
+ExecStartPost=/usr/bin/touch %S/devcontainers-ext/done
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=default.target

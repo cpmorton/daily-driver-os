@@ -1,0 +1,26 @@
+# Daily-driver apps, installed on first boot alongside default.preinstall.
+# Same format and rules as default.preinstall; `just validate-flatpaks` checks
+# each ID against Flathub before a change can land.
+#
+# Signal, Discord and Obsidian on Flathub are community-maintained wrappers of
+# the vendors' own builds; LibreOffice and GIMP are published upstream.
+
+[Flatpak Preinstall org.signal.Signal]
+Branch=stable
+
+[Flatpak Preinstall com.discordapp.Discord]
+Branch=stable
+
+[Flatpak Preinstall org.libreoffice.LibreOffice]
+Branch=stable
+
+[Flatpak Preinstall md.obsidian.Obsidian]
+Branch=stable
+
+[Flatpak Preinstall org.gimp.GIMP]
+Branch=stable
+
+# Bluefin devmode's default pick, minus Docker: this image is rootless podman
+# only. Podman Desktop drives the per-user podman.socket.
+[Flatpak Preinstall io.podman_desktop.PodmanDesktop]
+Branch=stable

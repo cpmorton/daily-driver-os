@@ -1,7 +1,7 @@
 ###############################################################################
 # PROJECT NAME CONFIGURATION
 ###############################################################################
-# Name: finpilot
+# Name: daily-driver-os
 #
 # The authoritative name at publish time is the repository name: build-image.yml
 # derives IMAGE_NAME from ${{ github.event.repository.name }} and pushes the
@@ -54,7 +54,7 @@ FROM quay.io/fedora-ostree-desktops/silverblue:44@sha256:82ea364ab3c5abb01bbeb8c
 
 # Image identity - these define how bootc, fastfetch, and the ublue ecosystem
 # recognize your image. Change these to match your project name.
-ARG IMAGE_NAME="finpilot"
+ARG IMAGE_NAME="daily-driver-os"
 ARG IMAGE_VENDOR="projectbluefin"
 ARG UBLUE_IMAGE_TAG="stable"
 # Supplied by `just build` from the base image's FROM line.
@@ -105,6 +105,27 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     --mount=type=tmpfs,dst=/tmp \
     /ctx/build/20-packages-and-services.sh
 
+### DAILY DRIVER
+## This image's own phases: real /opt, /usr/local and /root, Chrome, VS Code,
+## gh, chezmoi, the localadmin account, PAM and sshd lockdown, systemd-homed,
+## rootless-only podman. Must run before cleanup, which disables leftover
+## third-party repositories and prunes /var.
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=cache,dst=/var/cache/libdnf5 \
+    --mount=type=cache,dst=/var/cache/rpm-ostree \
+    --mount=type=tmpfs,dst=/boot \
+    --mount=type=tmpfs,dst=/tmp \
+    /ctx/build/70-daily-driver.sh
+
+## Claude Code CLI from Anthropic's signed dnf repository. Kept in its own
+## layer so a CLI release does not invalidate the daily-driver layer above.
+RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
+    --mount=type=cache,dst=/var/cache/libdnf5 \
+    --mount=type=cache,dst=/var/cache/rpm-ostree \
+    --mount=type=tmpfs,dst=/boot \
+    --mount=type=tmpfs,dst=/tmp \
+    /ctx/build/75-claude.sh
+
 ### CLEANUP
 ## Finalises package and Flatpak sources, then prunes build artifacts before
 ## linting. /run is deliberately not mounted as tmpfs here: the script must
@@ -116,22 +137,22 @@ RUN --mount=type=bind,from=ctx,source=/,target=/ctx \
     /ctx/build/90-cleanup.sh
 
 ### /opt
-## Makes /opt writeable by default. Needs to be here to make the main image
-## build strict (no /opt there). This is for downstream images/stuff like k0s.
-## If you need /opt as an immutable real directory for build-time packages
-## (e.g. google-chrome, docker-desktop), replace the next line with:
-##   RUN rm /opt && mkdir /opt
-RUN rm -rf /opt && ln -s /var/opt /opt
+## Upstream finpilot ends by replacing /opt with a symlink to /var/opt. This
+## image does the opposite: 70-daily-driver.sh makes /opt, /usr/local and /root
+## real, image-owned directories *before* installing packages, because
+## google-chrome-stable unpacks into /opt/google, and 90-cleanup.sh prunes
+## anything that lands in /var. Do not restore the upstream line: its
+## `rm -rf /opt` would delete Chrome from the image.
 
 ### IMAGE METADATA
 ## The Containerfile owns the metadata schema baked into every image. Local
 ## builds and CI supply the dynamic values through `just build`; keeping these
 ## ARGs late prevents a new version or timestamp from invalidating package and
 ## overlay layers above.
-ARG IMAGE_DESC="My Customized Universal Blue Image"
+ARG IMAGE_DESC="Opinionated Fedora Silverblue daily driver: Bluefin common layer, devcontainers, Chrome, Claude Code"
 ARG IMAGE_CREATED=""
 ARG IMAGE_LOGO_URL="https://avatars.githubusercontent.com/u/120078124?s=200&v=4"
-ARG IMAGE_KEYWORDS="bootc,ublue,universal-blue"
+ARG IMAGE_KEYWORDS="bootc,ublue,universal-blue,bluefin,devcontainers"
 ARG IMAGE_REF="main"
 ## The commit the image was built from. It is declared here, with the other
 ## volatile metadata, so a new commit only invalidates the label layer.

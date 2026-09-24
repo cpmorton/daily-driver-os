@@ -1,0 +1,14 @@
+[Unit]
+Description=Create localadmin home directory
+After=systemd-sysusers.service
+RequiresMountsFor=/var/home
+Before=gdm.service display-manager.service
+ConditionPathExists=!/var/home/localadmin
+
+[Service]
+Type=oneshot
+# pam's helper copies /etc/skel with correct ownership; umask 0077 => 0700 home
+ExecStart=/usr/sbin/mkhomedir_helper localadmin 0077
+
+[Install]
+WantedBy=multi-user.target

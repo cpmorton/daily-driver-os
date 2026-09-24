@@ -1,0 +1,29 @@
+# [VERIFY in VM] console-prompt choreography with plymouth + GDM
+[Unit]
+Description=Set localadmin password (first boot, tty1)
+ConditionPathExists=!/var/lib/localadmin-firstboot/done
+After=systemd-sysusers.service systemd-user-sessions.service
+Before=gdm.service display-manager.service getty@tty1.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=infinity
+StateDirectory=localadmin-firstboot
+# Plymouth owns the console until told to leave
+ExecStartPre=-/usr/bin/plymouth quit
+ExecStartPre=-/usr/bin/chvt 1
+ExecStart=/usr/bin/passwd localadmin
+ExecStartPost=/usr/bin/touch /var/lib/localadmin-firstboot/done
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+# pwquality rejection / typo => ask again; boot waits (GDM is ordered after us)
+Restart=on-failure
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
