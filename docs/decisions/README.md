@@ -22,6 +22,7 @@ supersede a record with a new one and mark the old one's status.
 | 0013 | [Image signing: keyless in CI, not yet enforced on the machine](0013-image-signing.md) | Accepted, known gap |
 | 0014 | [Nightly builds and finpilot's two-channel release](0014-nightly-builds-and-release-channels.md) | Accepted |
 | 0015 | [Leave upstream files alone; override from this image's phases](0015-leave-upstream-files-alone.md) | Accepted |
+| 0016 | [The installer ISO is built in CI; nobody needs Linux to install](0016-installer-built-in-ci.md) | Accepted |
 
 ## Template
 

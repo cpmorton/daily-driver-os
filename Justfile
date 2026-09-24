@@ -321,7 +321,10 @@ _build-bib $target_image $tag $type $config: (_rootful_load_image target_image t
         image_info=$(just sudoif podman run --rm --entrypoint /usr/bin/cat \
             "${target_image}:${tag}" /usr/share/ublue-os/image-info.json)
         image_ref=$(jq -r '."image-ref"' <<<"${image_info}" | sed 's|.*docker://||')
-        build_image="${image_ref}:$(jq -r '."image-tag"' <<<"${image_info}")"
+        # daily-driver-os: ISO_IMAGE_TAG overrides the tag installed machines
+        # follow. A promoted :stable image is a :stable-testing build, so its
+        # image-info says stable-testing; see docs/decisions/0016-installer-built-in-ci.md.
+        build_image="${image_ref}:${ISO_IMAGE_TAG:-$(jq -r '."image-tag"' <<<"${image_info}")}"
         just sudoif podman tag "${target_image}:${tag}" "${build_image}"
     fi
 

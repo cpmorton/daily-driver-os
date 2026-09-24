@@ -150,11 +150,20 @@ need `homectl`).
 | File | Change | Why |
 | --- | --- | --- |
 | `Containerfile` | Name; description and keywords; phases 70 and 75; the `/opt` step removed | [0009](decisions/0009-real-opt-usrlocal-root.md), [0015](decisions/0015-leave-upstream-files-alone.md) |
-| `Justfile` | Image name default | Identity rename (`tests/contract/identity_test.bats`) |
+| `Justfile` | Image name default; `ISO_IMAGE_TAG` override in `_build-bib` | Identity rename (`tests/contract/identity_test.bats`); [0016](decisions/0016-installer-built-in-ci.md) |
 | `.github/workflows/build-image.yml` | Nightly schedule | [0014](decisions/0014-nightly-builds-and-release-channels.md) |
 | `iso/iso.toml` | `rootpw --lock` in the kickstart | [0005](decisions/0005-accounts-and-access.md) |
 | `README.md` | Rewritten top half; upstream reference sections kept | |
 | `artifacthub-repo.yml` | Deleted: not publishing to Artifact Hub | |
+
+New repository files outside the image:
+
+| File | Does | Why |
+| --- | --- | --- |
+| `.github/workflows/build-iso.yml` | Builds the installer ISO on demand and uploads it as an artifact | [0016](decisions/0016-installer-built-in-ci.md) |
+| `.gitattributes` | LF line endings on every checkout, Windows included | [0016](decisions/0016-installer-built-in-ci.md) |
+| `CLAUDE.md`, `.claude/` | Claude Code rules and upstream's agent skills | [0012](decisions/0012-claude.md) |
+| `docs/`, `tests/contract/daily-driver_test.bats`, `tests/contract/provenance_test.bats` | This documentation, and the tests that keep it true | This page |
 
 ## Created on each machine, not in the image
 

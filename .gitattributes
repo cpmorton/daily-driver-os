@@ -1,0 +1,5 @@
+# LF everywhere, including Windows checkouts: these files run on Linux
+# (build scripts, units, ujust recipes) and CRLF breaks them.
+* text=auto eol=lf
+*.iso binary
+*.png binary

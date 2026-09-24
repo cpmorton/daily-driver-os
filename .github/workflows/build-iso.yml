@@ -1,0 +1,92 @@
+---
+name: Build installer ISO
+
+# Manual only. Builds the Anaconda installer ISO for a published image tag
+# with the same `just build-iso` recipe a Linux machine would run, and uploads
+# it as a workflow artifact. Nobody installing this image needs Linux: flash
+# the artifact from Windows (docs/runbooks/reinstall.md).
+# See docs/decisions/0016-installer-built-in-ci.md.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Tag that installed machines follow
+        type: choice
+        default: stable
+        options:
+          - stable
+          - stable-testing
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag }}
+  cancel-in-progress: true
+
+jobs:
+  iso:
+    name: Build ISO
+    # Same runner and setup as build-image.yml: setup-runner frees disk and
+    # provides a btrfs-backed container store large enough for image + ISO.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Setup runner
+        uses: projectbluefin/actions/bootc-build/setup-runner@837850b6100b22c7920476035e7e1c28fdbba67f # v1
+        with:
+          storage-backend: btrfs
+          native-overlay: "true"
+          update-podman: "true"
+          install-tools: '["just"]'
+
+      - name: Build ISO
+        shell: bash
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          # Pulls the published image into root podman, then bootc-image-builder.
+          # ISO_IMAGE_TAG pins the tag installed machines follow (see the Justfile).
+          ISO_IMAGE_TAG="${TAG}" just build-iso "${IMAGE,,}" "${TAG}"
+
+      - name: Name and checksum
+        id: iso
+        shell: bash
+        env:
+          NAME: ${{ github.event.repository.name }}-${{ inputs.tag }}
+        run: |
+          iso="$(find output -name '*.iso' -print -quit)"
+          if [[ -z "${iso}" ]]; then
+            echo "::error::no ISO under output/" >&2
+            exit 1
+          fi
+          mv "${iso}" "output/${NAME}.iso"
+          (cd output && sha256sum "${NAME}.iso" > "${NAME}.iso.sha256")
+          size="$(stat -c %s "output/${NAME}.iso")"
+          echo "size=${size}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "## ${NAME}.iso"
+            echo ""
+            echo "Size: $(numfmt --to=iec "${size}")"
+            echo ""
+            echo '```'
+            cat "output/${NAME}.iso.sha256"
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ github.event.repository.name }}-${{ inputs.tag }}-iso
+          path: |
+            output/*.iso
+            output/*.iso.sha256
+          # An ISO doesn't compress; don't spend runner time trying.
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error

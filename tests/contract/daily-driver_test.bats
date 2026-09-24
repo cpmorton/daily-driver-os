@@ -100,3 +100,10 @@ line_of() {
 	[ ! -e "${FILES}/usr/local" ]
 	[ ! -e "${FILES}/root" ]
 }
+
+@test "installer: the ISO follows the chosen tag, not the one baked into image-info" {
+	# :stable is a promoted :stable-testing build, so image-info says
+	# stable-testing; without the override the ISO installs testing machines.
+	grep -qF 'ISO_IMAGE_TAG:-' "${REPO_ROOT}/Justfile"
+	grep -qF 'ISO_IMAGE_TAG="${TAG}" just build-iso' "${REPO_ROOT}/.github/workflows/build-iso.yml"
+}

@@ -1,45 +1,91 @@
-# Install or reinstall
+# Install or reinstall (from Windows)
 
-Installing wipes the OS stick's `/etc` and `/var`. The home partition survives.
-**The internal disk also holds Windows: in every step, check which device you
-point at.**
+No Linux needed. You need a Windows PC, two USB devices, and about an hour.
 
-## Before a reinstall
+| Device | Role | Size |
+| --- | --- | --- |
+| **Installer stick** | Temporary: boots the installer. Erased. | 8 GB or more |
+| **OS drive** | Where the OS lives from now on. Erased. | 64 GB or more; an external SSD is much faster than a stick |
 
-1. Make sure the homed key backup from `first-boot.md` step 4 exists.
-2. Note the home partition: `lsblk -f`.
+**The laptop's internal disk holds Windows. Nothing in these steps touches
+it, as long as you pick the right disk in step 6.**
 
-## Path A: installer ISO built from this image (clean)
+## 0. Before you start
 
-On any Linux machine with podman:
+- **BitLocker recovery key.** Booting from USB can make Windows ask for it
+  next time. Get it now from <https://aka.ms/myrecoverykey> (or
+  `manage-bde -protectors -get C:` in an admin terminal) and keep it off
+  the laptop.
+- **Reinstalling?** Make sure the homed key backup from `first-boot.md`
+  step 4 exists. Without it, existing homes won't unlock.
 
-```bash
-just build-iso ghcr.io/OWNER/daily-driver-os stable
+## 1. Get the ISO
+
+Someone with access to the repository runs **Actions → Build installer ISO →
+Run workflow** (tag: `stable`), or `gh workflow run build-iso.yml -f tag=stable`.
+It takes 20–40 minutes. Then download the artifact from the run page, or:
+
+```powershell
+gh run download --repo OWNER/daily-driver-os --name daily-driver-os-stable-iso
 ```
 
-[VERIFY that the recipe takes a registry reference; if not, run `just build`
-first and use the local default.]
+Artifacts expire after 14 days; re-run the workflow for a fresh one.
 
-Boot the ISO and choose **the USB stick** as the target. Create **no user**:
-the image creates localadmin itself, and an installer-made user would be an
-unrestricted `wheel` admin. Root is already locked by the kickstart.
+## 2. Check it
 
-## Path B: switch an existing Silverblue or Bluefin install
-
-```bash
-sudo bootc switch ghcr.io/OWNER/daily-driver-os:stable
-sudo systemctl reboot
+```powershell
+(Get-FileHash .\daily-driver-os-stable.iso -Algorithm SHA256).Hash.ToLower()
+Get-Content .\daily-driver-os-stable.iso.sha256
 ```
 
-localadmin gets created and prompts on tty1 at the first boot into this image.
-Any user the old installer created is still there, still in `wheel`: once
-localadmin works, remove it (`sudo userdel -r <old-user>`).
+The two hashes must match.
 
-## After the install
+## 3. Write the installer stick
 
-1. Set localadmin's password on tty1 (`first-boot.md` step 1). Skip
-   `ujust home-partition`: the partition already holds the homes, so mount it
-   as it is:
+Use **Fedora Media Writer** (`winget install Fedora.FedoraMediaWriter`):
+choose *Select .iso file*, pick the ISO, pick the installer stick, write.
+
+Rufus also works: when it asks, choose **DD image mode** (not ISO mode).
+
+## 4. Boot the installer
+
+1. Plug in **both** USB devices. Shut Windows down fully: hold **Shift**
+   while clicking *Shut down*, so Fast Startup doesn't leave the disk half
+   hibernated.
+2. Power on and open the **one-time boot menu** (usually F12; Dell and Lenovo
+   F12, HP F9, ASUS F8 or Esc). Pick the installer stick, in UEFI mode.
+   Don't change the permanent boot order: that's what tends to trigger
+   BitLocker recovery.
+3. Secure Boot can stay on: the image uses Fedora's signed kernel and boot
+   chain.
+
+## 5. Install
+
+1. Language and keyboard as usual.
+2. **Installation destination: select only the OS drive.** Check the size and
+   model. Leave the laptop's internal disk and the installer stick unselected.
+   Choose automatic partitioning and let it erase the OS drive.
+3. **Create no user.** The image creates `localadmin` itself; an
+   installer-made user would be an unrestricted administrator. Root is
+   already locked.
+4. Install, then reboot and remove the installer stick.
+
+## 6. First boot
+
+Use the boot menu again and pick the OS drive, then follow
+[first-boot.md](first-boot.md): the console asks for localadmin's password
+before the login screen appears.
+
+After installing, the firmware may list the new OS first. If the laptop should
+still start Windows by default, move Windows back to the top in the firmware
+boot order, or in Windows run `bcdedit /enum firmware` to check.
+
+## Reinstall: after step 5
+
+The home partition already holds the homes, so mount it as it is instead of
+running `ujust home-partition`:
+
+1. Set localadmin's password on tty1 (`first-boot.md` step 1), then:
    ```bash
    lsblk -f                         # note the home partition's UUID and FSTYPE
    echo "UUID=<uuid> /var/home <fstype> defaults,nofail,x-systemd.device-timeout=10s 0 0" | sudo tee -a /etc/fstab
@@ -55,3 +101,15 @@ localadmin works, remove it (`sudo userdel -r <old-user>`).
 3. Re-run `ujust homed-user <name>` (it skips creating an existing home and
    restores the subordinate IDs rootless podman needs) and
    `ujust brew-owner <name>`; both wrote to the old `/etc`.
+
+## Alternative: switch an existing Fedora Atomic install
+
+A machine already running Silverblue or Bluefin can switch without an ISO:
+
+```bash
+sudo bootc switch ghcr.io/OWNER/daily-driver-os:stable
+sudo systemctl reboot
+```
+
+Any user the old installer created stays in `wheel`: once localadmin works,
+remove it (`sudo userdel -r <old-user>`).
