@@ -1,6 +1,6 @@
 # 0018. Provisioning: a generic installer plus a per-machine seed stick
 
-- **Status:** Accepted, amended by [0019](0019-no-seeded-passwords.md)
+- **Status:** Superseded by [0020](0020-machine-defaults-on-the-esp.md)
 - **Date:** 2026-09-23
 - **Amends:** [0005](0005-accounts-and-access.md) (localadmin's password and
   UID), [0002](0002-public-and-secret-free.md) (where secrets live)
@@ -13,6 +13,7 @@
   and `diskSize` only. Read the Decision below with that in mind: the hash,
   `secret.password`, `passwordChangeNow`, `/run/credstore` and
   `homectl firstboot` parts no longer apply.
+- 2026-09-23, [0020](0020-machine-defaults-on-the-esp.md): superseded. No seed stick: machine defaults live on the EFI partition, written from Windows by `Set-DailyDriverDefaults.ps1`.
 
 ## Context
 

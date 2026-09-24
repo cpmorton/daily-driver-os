@@ -1,0 +1,79 @@
+#!/usr/bin/bash
+# First boot, on tty1, before the login screen. Each step offers the machine
+# defaults (from the EFI partition, via defaults-import) and takes Enter to
+# accept or a different answer to override:
+#   1. hostname
+#   2. localadmin's password: the defaults' hash, or typed here
+#   3. disk unlock: TPM2, TPM2 + PIN, security key or passphrase
+#   4. daily users: create each (password typed here) or skip to restore later
+# A finished step leaves a marker, so an interrupted first boot resumes where
+# it stopped. See docs/decisions/0020-machine-defaults-on-the-esp.md.
+set -euo pipefail
+
+ROOT="${FIRSTBOOT_ROOT:-}" # test seam: prefixes every path this script touches
+export LIBEXEC="${LIBEXEC:-/usr/libexec/daily-driver}"
+readonly DEFAULTS="${ROOT}/run/daily-driver/defaults.json"
+readonly ERROR="${ROOT}/run/daily-driver/defaults.error"
+readonly STATE="${ROOT}/var/lib/daily-driver"
+readonly HOSTNAME_RE='^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$'
+
+default() { [[ -f "${DEFAULTS}" ]] && jq -r "$1 // empty" "${DEFAULTS}" || true; }
+done_step() { [[ -e "${STATE}/firstboot.$1" ]]; }
+mark() { touch "${STATE}/firstboot.$1"; }
+
+mkdir -p "${STATE}"
+echo
+echo "=== daily-driver-os: first boot ==="
+if [[ -f "${DEFAULTS}" ]]; then
+	echo "Machine defaults found on the EFI partition. Press Enter to accept each one."
+elif [[ -f "${ERROR}" ]]; then
+	echo "Machine defaults on the EFI partition were rejected: $(cat "${ERROR}")"
+	echo "Carrying on without them. Fix them from Windows (Set-DailyDriverDefaults.ps1)."
+fi
+
+# --- 1. Hostname ---------------------------------------------------------------
+if ! done_step hostname; then
+	suggested="$(default .hostname)"
+	suggested="${suggested:-$(hostnamectl hostname 2>/dev/null || true)}"
+	while :; do
+		read -rp "Hostname [${suggested}]: " name
+		name="${name:-${suggested}}"
+		[[ "${name}" =~ ${HOSTNAME_RE} ]] && break
+		echo "Letters, digits and hyphens only; 63 at most."
+	done
+	hostnamectl set-hostname "${name}"
+	mark hostname
+fi
+
+# --- 2. localadmin -------------------------------------------------------------
+if ! done_step localadmin; then
+	if "${LIBEXEC}/localadmin-needs-password"; then
+		echo
+		echo "--- localadmin (the administrator's account; not the machine's user)"
+		hash="$(default .localadmin.hashedPassword)"
+		if [[ -n "${hash}" ]]; then
+			read -rp "Use localadmin's password from the machine defaults? [Y/n] " answer
+			[[ "${answer}" =~ ^[Nn] ]] || usermod -p "${hash}" localadmin
+		fi
+		until ! "${LIBEXEC}/localadmin-needs-password"; do
+			passwd localadmin || echo "Try again."
+		done
+	fi
+	mark localadmin
+fi
+
+# --- 3. Disk unlock ------------------------------------------------------------
+if ! done_step disk; then
+	"${LIBEXEC}/disk-unlock" "$(default .diskUnlock)"
+	mark disk
+fi
+
+# --- 4. Daily users ------------------------------------------------------------
+if ! done_step users; then
+	USERS_ROOT="${ROOT}" "${LIBEXEC}/first-users"
+	mark users
+fi
+
+touch "${STATE}/firstboot-done"
+echo
+echo "First boot finished. Starting the login screen."

@@ -52,7 +52,7 @@ has no system-wide form, or can't be redistributed.
 | `00-image-info.sh` | upstream | os-release and image-info.json |
 | `10-overlay.sh` | upstream | common + brew overlays, `custom/files`, seams, units |
 | `20-packages-and-services.sh` | upstream | just, gum, fzf, jq, uupd |
-| `70-daily-driver.sh` | this image | real `/opt`, Chrome, VS Code, gh, chezmoi, homed, accounts, PAM, rootless podman, first-boot seed and user setup, Windows boot entry |
+| `70-daily-driver.sh` | this image | real `/opt`, Chrome, VS Code, gh, chezmoi, homed, accounts, PAM, rootless podman, TPM2/FIDO2 initramfs, first-boot setup, home backup, Windows boot entry |
 | `75-claude.sh` | this image | Claude Code CLI, fingerprint-checked |
 | `90-cleanup.sh` | upstream | repositories off, `/var` pruned, lint prep |
 

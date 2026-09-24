@@ -80,7 +80,7 @@ line_of() {
 @test "public repo: no password hashes anywhere in the image inputs" {
 	# crypt(3) prefixes: yescrypt, sha512, sha256, bcrypt, md5.
 	run grep -rIEn '\$(y|6|5|2[aby]|1)\$[./A-Za-z0-9]{8,}' \
-		"${REPO_ROOT}/build" "${REPO_ROOT}/custom" "${REPO_ROOT}/iso" "${CONTAINERFILE}"
+		"${REPO_ROOT}/build" "${REPO_ROOT}/custom" "${REPO_ROOT}/iso" "${REPO_ROOT}/tools" "${CONTAINERFILE}"
 	[ "$status" -ne 0 ]
 }
 

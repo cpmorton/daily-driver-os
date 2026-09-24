@@ -1,0 +1,39 @@
+# First boot, on tty1 before the login screen: hostname, localadmin's password,
+# disk unlock (TPM2, security key or passphrase), daily users. Each step offers
+# the machine defaults; Enter accepts. Resumes where it stopped if interrupted.
+# See docs/decisions/0020-machine-defaults-on-the-esp.md.
+# [VERIFY in VM] console-prompt choreography with plymouth + GDM
+[Unit]
+Description=First boot setup (tty1)
+# Never give up: GDM is ordered after this unit and must not take tty1 while
+# nobody can log in yet.
+StartLimitIntervalSec=0
+ConditionPathExists=!/var/lib/daily-driver/firstboot-done
+Wants=systemd-homed.service
+After=systemd-sysusers.service localadmin-home.service systemd-homed.service
+After=daily-driver-defaults.service systemd-user-sessions.service
+Before=gdm.service display-manager.service getty@tty1.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=infinity
+# Plymouth owns the console until told to leave
+ExecStartPre=-/usr/bin/plymouth quit
+ExecStartPre=-/usr/bin/chvt 1
+ExecStart=/usr/libexec/daily-driver/firstboot
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+# A crash (or Ctrl-C) restarts it; finished steps are skipped. RestartMode=direct
+# keeps the start job running across restarts (systemd 254+); otherwise the job
+# fails before each restart, and GDM, ordered after us, would start on tty1.
+Restart=on-failure
+RestartMode=direct
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

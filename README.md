@@ -41,12 +41,13 @@ alongside upstream's `default.preinstall`.
 
 - **root**: password locked, in the image and in the installer kickstart.
 - **localadmin** (UID 1000, `wheel`): the administrator's account on every
-  machine, not the user's. Created by `sysusers.d`; its password is typed on
-  tty1 at first boot, never stored in this repository or on a seed stick.
+  machine, not the user's. Created by `sysusers.d`; its password is set at
+  first boot, from a hash in the machine defaults or typed on tty1; never in
+  this repository.
   Console, GDM, su, sudo and polkit only: `pam_access` refuses it anywhere
   `PAM_RHOST` is set, and sshd denies it. No SSH key.
 - **Daily users**: systemd-homed, each home its own LUKS-encrypted file that
-  localadmin can't open. Created at first boot: names from the seed stick or
+  localadmin can't open. Created at first boot: from the machine defaults or
   asked on screen, passwords always typed on screen. Not in `wheel`.
 
 ### Removed or disabled
@@ -72,7 +73,8 @@ alongside upstream's `default.preinstall`.
 
 | Step | Where | Runbook |
 | --- | --- | --- |
-| Prepare a machine's seed (optional) | Windows | [docs/runbooks/seed-stick.md](docs/runbooks/seed-stick.md) |
+| Set a machine's defaults (optional) | Windows | [docs/runbooks/machine-defaults.md](docs/runbooks/machine-defaults.md) |
+| Back up or restore a user's home | Linux | [docs/runbooks/home-backup.md](docs/runbooks/home-backup.md) |
 | Install beside Windows | installer stick | [docs/runbooks/reinstall.md](docs/runbooks/reinstall.md) |
 | First boot: localadmin, daily users | console | [docs/runbooks/first-boot.md](docs/runbooks/first-boot.md) |
 | Update or roll back | any time | [docs/runbooks/upgrade.md](docs/runbooks/upgrade.md) |

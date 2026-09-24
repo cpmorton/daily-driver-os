@@ -1,10 +1,14 @@
 # 0019. Passwords are typed at first boot, never seeded
 
-- **Status:** Accepted
+- **Status:** Accepted, amended by [0020](0020-machine-defaults-on-the-esp.md)
 - **Date:** 2026-09-23
 - **Amends:** [0018](0018-provisioning-seed-stick.md) (what the seed carries),
   [0005](0005-accounts-and-access.md) (where localadmin's password comes from),
   [0002](0002-public-and-secret-free.md) (where secrets live)
+
+## Amendments
+
+- 2026-09-23, [0020](0020-machine-defaults-on-the-esp.md): at the administrator's request, localadmin's password may again come from a stored *hash* (in the machine defaults on the EFI partition), offered at first boot and overridable. Daily users' passwords are still always typed at first boot; the allowlist and the rest of this record stand.
 
 ## Context
 

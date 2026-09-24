@@ -1,0 +1,125 @@
+#!/usr/bin/bash
+# Choose how the encrypted root unlocks at boot, and enroll it.
+#   disk-unlock [DEFAULT]   DEFAULT: tpm2, tpm2-pin, fido2 or passphrase
+#
+# The installer's "Encrypt my data" creates the LUKS2 root with a passphrase.
+# This adds a TPM2 chip (bound to PCR 7, the Secure Boot state, so kernel
+# updates don't break it) or FIDO2 security keys (YubiKey) with
+# systemd-cryptenroll, and offers a recovery key. The passphrase always stays as
+# a fallback. systemd-cryptsetup tries LUKS2 tokens by itself when no key file
+# is configured, so no kernel argument or crypttab change is needed; the image's
+# initramfs carries the token plugins (build/70-daily-driver.sh asserts it).
+# Runs at first boot, and any time later as `ujust disk-unlock`.
+# See docs/decisions/0021-encrypted-root.md.
+set -euo pipefail
+
+readonly TPM_DEVICE="${TPM_DEVICE:-/dev/tpmrm0}" # test seam
+
+# The LUKS device under the root filesystem, or nothing if it isn't encrypted.
+# ROOT_LUKS_DEVICE is a test seam ("none" = unencrypted).
+luks_device() {
+	if [[ -n "${ROOT_LUKS_DEVICE:-}" ]]; then
+		[[ "${ROOT_LUKS_DEVICE}" == none ]] || echo "${ROOT_LUKS_DEVICE}"
+		return 0
+	fi
+	local source
+	# bootc: /sysroot is the physical root; -v drops a btrfs [/subvolume] suffix.
+	source="$(findmnt -nvo SOURCE /sysroot 2>/dev/null || findmnt -nvo SOURCE /)"
+	lsblk -nspo PATH,FSTYPE "${source}" 2>/dev/null | awk '$2 == "crypto_LUKS" { print $1; exit }'
+}
+
+# Retry an enrollment until it works or the person skips it. The explicit
+# return 0 matters: an until loop's status is its body's last command, here a
+# failed [[ ]] after answering "retry".
+enroll() {
+	local answer
+	until systemd-cryptenroll "$@"; do
+		read -rp "That didn't work. [R]etry or [s]kip? " answer
+		if [[ "${answer}" =~ ^[Ss] ]]; then return 1; fi
+	done
+	return 0
+}
+
+# Types of the enrolled slots (password, recovery, tpm2, fido2, ...), one per line.
+slot_types() { systemd-cryptenroll "${device}" 2>/dev/null | awk 'NR > 1 { print $2 }'; }
+
+device="$(luks_device)"
+if [[ -z "${device}" ]]; then
+	echo
+	echo "!!! The Linux root is NOT encrypted. Reinstall and tick \"Encrypt my data\""
+	echo "!!! under Installation Destination to protect this machine's data at rest."
+	echo "!!! (Daily users' homes are encrypted either way.)"
+	exit 0
+fi
+
+have_tpm=0
+[[ -e "${TPM_DEVICE}" ]] && have_tpm=1
+default="${1:-}"
+if [[ -z "${default}" ]]; then
+	if ((have_tpm)); then default=tpm2; else default=passphrase; fi
+fi
+
+echo
+echo "=== Disk unlock (${device}) ==="
+echo "  tpm2        this machine's TPM chip unlocks it; no typing at boot, but"
+echo "              whoever holds the laptop can reach a root shell from GRUB"
+echo "  tpm2-pin    TPM chip plus a short PIN at every boot"
+echo "  fido2       a security key (YubiKey): plug in and touch at every boot"
+echo "  passphrase  type the installer's disk passphrase at every boot"
+((have_tpm)) || echo "  (no TPM2 chip found: tpm2 and tpm2-pin won't work here)"
+echo "Whichever you choose, the installer passphrase still works as a fallback,"
+echo "and any TPM or security-key enrollment from an earlier choice is removed."
+echo "When asked for the current passphrase, type the one you set in the installer."
+
+while :; do
+	read -rp "Unlock with [${default}]: " method
+	method="${method:-${default}}"
+	case "${method}" in
+	tpm2 | tpm2-pin)
+		if ((!have_tpm)); then
+			echo "No TPM2 chip found. Pick another method."
+			continue
+		fi
+		# The new slot survives its own --wipe-slot; older TPM and key slots don't.
+		args=(--tpm2-device=auto --tpm2-pcrs=7 "--wipe-slot=tpm2,fido2")
+		[[ "${method}" == tpm2-pin ]] && args+=(--tpm2-with-pin=yes)
+		enroll "${args[@]}" "${device}" || continue
+		;;
+	fido2)
+		echo "Plug in the security key. Touch it when it blinks; it may ask for its PIN."
+		enroll --fido2-device=auto --wipe-slot=tpm2,fido2 "${device}" || continue
+		while :; do
+			read -rp "Enroll a spare key too (recommended)? [y/N] " spare
+			[[ "${spare}" =~ ^[Yy] ]] || break
+			echo "Swap in the spare key, then touch it."
+			enroll --fido2-device=auto "${device}" || true
+		done
+		;;
+	passphrase)
+		if slot_types | grep -qxE 'tpm2|fido2'; then
+			echo "Removing the TPM and security-key enrollments; type the passphrase when asked."
+			enroll --wipe-slot=tpm2,fido2 "${device}" || continue
+		fi
+		;;
+	*)
+		echo "Type tpm2, tpm2-pin, fido2 or passphrase."
+		continue
+		;;
+	esac
+	break
+done
+echo "Disk unlock: ${method}."
+
+if slot_types | grep -qx recovery; then
+	read -rp "Replace the existing recovery key with a new one? [y/N] " answer
+	[[ "${answer}" =~ ^[Yy] ]] && recovery=(--recovery-key --wipe-slot=recovery) || recovery=()
+else
+	read -rp "Add a recovery key for your password manager (recommended)? [Y/n] " answer
+	[[ "${answer}" =~ ^[Nn] ]] && recovery=() || recovery=(--recovery-key)
+fi
+if ((${#recovery[@]})); then
+	if enroll "${recovery[@]}" "${device}"; then
+		read -rp "Save the recovery key above, then press Enter. It won't be shown again. " _
+		clear 2>/dev/null || true
+	fi
+fi

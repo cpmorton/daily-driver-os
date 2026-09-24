@@ -7,7 +7,8 @@ Linux needed anywhere; everything is prepared on Windows.
 | You need | For |
 | --- | --- |
 | **Installer stick**, 8 GB+ | The generic installer ISO. Erased when written; reusable for every machine. |
-| **Seed stick** (optional), any size | This machine's hostname, user names and files for their homes; no passwords. [seed-stick.md](seed-stick.md). |
+| Machine defaults (optional) | Pre-filled answers for first boot, set from Windows. [machine-defaults.md](machine-defaults.md). |
+| A backup drive (reinstall only) | Each user's home, saved with `ujust backup-home` first. [home-backup.md](home-backup.md). |
 | 100 GB+ of free disk space | Linux plus the encrypted homes. |
 
 ## 1. Prepare Windows (admin PowerShell, once per machine)
@@ -22,6 +23,9 @@ diskmgmt.msc                   # right-click C: > Shrink Volume; leave the space
 
 Shrink by at least 100 GB. Don't create a partition in the freed space: the
 installer uses unallocated space.
+
+Optionally, in the same window, set this machine's defaults:
+[machine-defaults.md](machine-defaults.md).
 
 ## 2. Get and check the installer
 
@@ -48,28 +52,29 @@ image release.
 2. **Installation Destination:** select the internal disk. Keep
    **Automatic** storage configuration. The installer uses the free space; if
    it offers to *reclaim* or *delete* space, cancel and shrink Windows more
-   instead.
+   instead. Tick **Encrypt my data** and choose a strong disk passphrase; keep
+   it in your password manager. It stays the fallback however the disk ends up
+   unlocking ([decision 0021](../decisions/0021-encrypted-root.md)).
 3. **Create no user.** The image creates localadmin (UID 1000) itself, and a
    user made here would take that UID. Root is already locked.
 4. Begin installation. When it finishes, remove the installer stick.
 
 ## 5. First boot
 
-1. If you made a seed stick, plug it in now.
-2. Boot. The menu lists this OS first and **Windows Boot Manager** second
+1. Boot. The menu lists this OS first and **Windows Boot Manager** second
    (the Windows entry appears from the second boot on).
-3. Before the login screen, the console imports the seed (if any), then asks
-   for localadmin's password, then each daily user's. Stay at the keyboard.
+2. Type the disk passphrase.
+3. Before the login screen, the console asks for the hostname, localadmin's
+   password, how the disk should unlock, and the daily users, offering the
+   machine defaults where set. Stay at the keyboard.
    Details: [first-boot.md](first-boot.md).
-4. Remove the seed stick; first boot deleted the seed from it.
 
 ## Reinstall
 
-Reinstalling wipes the Linux side, encrypted homes included. Before: copy each
-`/var/home/<user>.home` file somewhere safe (it's one file per user, still
-encrypted). After: copy it back to `/var/home/` and run `sudo homectl list`;
-if the home is listed as unsigned by this machine, see
-[recover.md](recover.md#an-encrypted-home-from-another-install).
+Reinstalling wipes the Linux side, encrypted homes included; the machine
+defaults on the EFI partition survive. Before: `ujust backup-home` each user.
+After: skip those users at first boot, then `ujust restore-home` them.
+[home-backup.md](home-backup.md).
 
 ## Alternative: switch an existing Fedora Atomic install
 

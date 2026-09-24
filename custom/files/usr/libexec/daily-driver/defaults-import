@@ -1,0 +1,166 @@
+#!/usr/bin/bash
+# Read this machine's defaults from its EFI system partition, at every boot
+# until first boot has finished.
+#
+# tools/windows/Set-DailyDriverDefaults.ps1 writes \EFI\daily-driver\defaults.json
+# from Windows on the same machine (the partition is shared in a dual boot, and
+# reinstalling Linux never touches it). Fields, all optional:
+#
+#   {"version": 1,
+#    "hostname": "lap-01",
+#    "localadmin": {"hashedPassword": "$6$..."},        crypt(3) hash, never a password
+#    "diskUnlock": "tpm2" | "tpm2-pin" | "fido2" | "passphrase",
+#    "users": [{"userName": "chris", "realName": "Chris", "uid": 60101,
+#               "shell": "/bin/zsh", "diskSize": <bytes>, "passwordChangeNow": false}],
+#    "flatpaks": ["org.example.App"]}
+#
+# The file is rebuilt from that allowlist; anything else is logged and dropped,
+# so it can't carry a user password, group membership or other record fields.
+# Output: /run/daily-driver/defaults.json (RAM, 0600) for the first-boot console,
+# and the Flatpaks as /etc/flatpak/preinstall.d/60-machine-defaults.preinstall.
+# Rejected defaults change nothing; the console then asks for everything.
+# See docs/decisions/0020-machine-defaults-on-the-esp.md.
+set -euo pipefail
+
+ROOT="${DEFAULTS_ROOT:-}" # test seam: prefixes every path this script writes
+readonly ESP_TYPE=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+readonly RELPATH=EFI/daily-driver/defaults.json
+readonly OUT_DIR="${ROOT}/run/daily-driver"
+readonly OUT="${OUT_DIR}/defaults.json"
+readonly ERR="${OUT_DIR}/defaults.error"
+readonly PREINSTALL="${ROOT}/etc/flatpak/preinstall.d/60-machine-defaults.preinstall"
+
+log() { echo "daily-driver-defaults: $*"; }
+reject() {
+	log "REJECTED: $*"
+	mkdir -p "${OUT_DIR}"
+	printf '%s\n' "$*" >"${ERR}"
+	exit 1
+}
+
+probe=""
+# shellcheck disable=SC2329 # invoked by the EXIT trap
+cleanup() {
+	[[ -n "${probe}" ]] || return 0
+	umount "${probe}" 2>/dev/null || true
+	rmdir "${probe}" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+rm -f "${OUT}" "${ERR}"
+staged="$(mktemp)"
+chmod 0600 "${staged}"
+trap 'rm -f "${staged}"; cleanup' EXIT
+
+# --- Find the file ------------------------------------------------------------
+found=""
+if [[ -n "${DEFAULTS_FILE:-}" ]]; then
+	[[ -f "${DEFAULTS_FILE}" ]] && cp "${DEFAULTS_FILE}" "${staged}" && found="${DEFAULTS_FILE}"
+else
+	probe="$(mktemp -d /run/daily-driver-esp.XXXXXX)"
+	while read -r dev type; do
+		[[ "${type,,}" == "${ESP_TYPE}" ]] || continue
+		mount -o ro,nosuid,nodev,noexec "${dev}" "${probe}" 2>/dev/null || continue
+		if [[ -f "${probe}/${RELPATH}" ]]; then
+			if [[ -z "${found}" ]]; then
+				cp "${probe}/${RELPATH}" "${staged}"
+				found="${dev}"
+			else
+				log "also found on ${dev}; using ${found}"
+			fi
+		fi
+		umount "${probe}"
+	done < <(lsblk -rno PATH,PARTTYPE)
+fi
+if [[ -z "${found}" ]]; then
+	log "no machine defaults (${RELPATH} on an EFI partition); the console will ask"
+	exit 0
+fi
+log "reading ${found}"
+
+# --- Validate -----------------------------------------------------------------
+jq -e 'type == "object"' "${staged}" >/dev/null 2>&1 || reject "not a JSON object"
+jq -e '.version == 1' "${staged}" >/dev/null || reject 'missing or unsupported "version"'
+
+# One jq program checks every field and prints the first problem, if any.
+problem="$(jq -r '
+	def text: type == "string" and (test("[:\n\r]") | not);
+	[
+	  (select(has("hostname")) | .hostname
+	    | select((type == "string" and test("^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")) | not)
+	    | "hostname: not a valid hostname"),
+	  (select(has("localadmin")) | .localadmin | select(type != "object") | "localadmin: must be an object"),
+	  (select(.localadmin | type == "object" and has("hashedPassword")) | .localadmin.hashedPassword
+	    | select((type == "string" and test("^\\$(6|y)\\$[^:\\s]+$")) | not)
+	    | "localadmin.hashedPassword: must be a yescrypt ($y$) or SHA-512 ($6$) crypt hash"),
+	  (select(has("diskUnlock")) | .diskUnlock
+	    | select(IN("tpm2", "tpm2-pin", "fido2", "passphrase") | not)
+	    | "diskUnlock: must be tpm2, tpm2-pin, fido2 or passphrase"),
+	  (select(has("users")) | .users | select(type != "array") | "users: must be a list"),
+	  (select(has("flatpaks")) | .flatpaks | select(type != "array") | "flatpaks: must be a list"),
+	  ((.users // [] | if type == "array" then . else [] end) | .[]
+	    | if type != "object" then "users: each entry must be an object"
+	      elif (.userName | type == "string" and test("^[a-z_][a-z0-9_-]{0,31}$")) | not
+	        then "users: invalid userName \(.userName | tojson)"
+	      elif .userName == "localadmin" then "users: localadmin is not a daily user"
+	      elif has("realName") and (.realName | text | not) then "users[\(.userName)].realName: text without colons"
+	      elif has("uid") and (.uid | type == "number" and . >= 60001 and . <= 60513 and . == floor | not)
+	        then "users[\(.userName)].uid: must be 60001-60513"
+	      elif has("shell") and (.shell | type == "string" and test("^/[A-Za-z0-9/._+-]+$") | not)
+	        then "users[\(.userName)].shell: must be an absolute path"
+	      elif has("diskSize") and (.diskSize | type == "number" and . >= 10737418240 and . <= 4398046511104 | not)
+	        then "users[\(.userName)].diskSize: bytes, 10 to 4096 GiB"
+	      elif has("passwordChangeNow") and (.passwordChangeNow | type != "boolean")
+	        then "users[\(.userName)].passwordChangeNow: true or false"
+	      else empty end),
+	  ((.users // [] | if type == "array" then . else [] end) | map(.userName?) | group_by(.)[]
+	    | select(length > 1) | "users: \(.[0]) appears twice"),
+	  ((.users // [] | if type == "array" then . else [] end) | map(.uid? // empty) | group_by(.)[]
+	    | select(length > 1) | "users: uid \(.[0]) appears twice"),
+	  ((.flatpaks // [] | if type == "array" then . else [] end) | .[]
+	    | select((type == "string" and test("^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+){2,}$")) | not)
+	    | "flatpaks: \(tojson) is not an application ID")
+	] | first // empty' "${staged}")"
+[[ -z "${problem}" ]] || reject "${problem}"
+
+# --- Rebuild from the allowlist -----------------------------------------------
+ignored="$(jq -r '
+	[(keys - ["version", "hostname", "localadmin", "diskUnlock", "users", "flatpaks"])[],
+	 ((.localadmin // {}) | keys - ["hashedPassword"] | .[] | "localadmin.\(.)"),
+	 ((.users // [])[] | . as $u | keys - ["userName", "realName", "uid", "shell", "diskSize", "passwordChangeNow"]
+	   | .[] | "users[\($u.userName)].\(.)")] | join(", ")' "${staged}")"
+[[ -z "${ignored}" ]] || log "ignoring ${ignored}"
+
+mkdir -p "${OUT_DIR}"
+(umask 077 && jq '
+	{version}
+	+ (if has("hostname") then {hostname} else {} end)
+	+ (if (.localadmin | type) == "object" and (.localadmin | has("hashedPassword"))
+		then {localadmin: {hashedPassword: .localadmin.hashedPassword}} else {} end)
+	+ (if has("diskUnlock") then {diskUnlock} else {} end)
+	+ {users: [(.users // [])[] | {userName}
+		+ (if has("realName") then {realName} else {} end)
+		+ (if has("uid") then {uid} else {} end)
+		+ (if has("shell") then {shell} else {} end)
+		+ (if has("diskSize") then {diskSize} else {} end)
+		+ (if has("passwordChangeNow") then {passwordChangeNow} else {} end)]}
+	+ {flatpaks: (.flatpaks // [])}' "${staged}" >"${OUT}")
+
+mapfile -t flatpaks < <(jq -r '.flatpaks[]' "${OUT}")
+if ((${#flatpaks[@]})); then
+	mkdir -p "$(dirname "${PREINSTALL}")"
+	{
+		echo "# Written by defaults-import from this machine's defaults (EFI partition)."
+		for app in "${flatpaks[@]}"; do
+			printf '\n[Flatpak Preinstall %s]\nBranch=stable\n' "${app}"
+		done
+	} >"${PREINSTALL}"
+	log "flatpaks: ${flatpaks[*]}"
+else
+	rm -f "${PREINSTALL}"
+fi
+
+log "defaults: hostname=$(jq -r '.hostname // "-"' "${OUT}")" \
+	"localadmin-hash=$(jq -r 'if .localadmin then "yes" else "no" end' "${OUT}")" \
+	"diskUnlock=$(jq -r '.diskUnlock // "-"' "${OUT}")" \
+	"users=$(jq -r '[.users[].userName] | join(",")' "${OUT}")"

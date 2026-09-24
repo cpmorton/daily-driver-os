@@ -1,60 +1,99 @@
 #!/usr/bin/bash
-# Create the first daily users, once, on the console before the login screen.
-#   - Seeded users: one per record seed-import staged in /run/daily-driver/users
-#     (name, full name, home size; never a password).
-#   - No seed: ask for each user's details here.
-# Either way the password is typed here, twice: homed derives the home's
-# encryption key from it, so nothing else ever holds it. Every homed user then
-# gets subordinate IDs for rootless podman.
-# See docs/decisions/0018-provisioning-seed-stick.md and
-# docs/decisions/0019-no-seeded-passwords.md.
+# Create the daily users on the console at first boot.
+#   - Users in the machine defaults: create each one, or skip it to restore a
+#     backed-up home later (`ujust restore-home`).
+#   - Then, or with no defaults, add users by hand.
+# Every password is typed here, twice: homed derives the home's encryption key
+# from it, so nothing else ever holds it. Every homed user then gets
+# subordinate IDs for rootless podman.
+# See docs/decisions/0020-machine-defaults-on-the-esp.md and
+# docs/decisions/0022-home-backup-and-restore.md.
 set -euo pipefail
 
 readonly NAME_RE='^[a-z_][a-z0-9_-]{0,31}$'
 ROOT="${USERS_ROOT:-}" # test seam: prefixes every path this script reads or writes
 LIBEXEC="${LIBEXEC:-/usr/libexec/daily-driver}"
-readonly STAGE="${ROOT}/run/daily-driver/users"
+readonly DEFAULTS="${ROOT}/run/daily-driver/defaults.json"
+readonly SHELLS="${SHELLS_FILE:-/etc/shells}"
 
 # Prints "yes" when someone other than the user is typing the password, so the
-# user must replace it at first login. Default: the user is at the keyboard.
+# user must replace it at first login. $2 is the default ("yes" or "no").
 change_at_login() {
-	local answer
-	read -rp "Is $1 at the keyboard to choose their own password? [Y/n] " answer
-	if [[ "${answer}" =~ ^[Nn] ]]; then echo yes; else echo no; fi
+	local answer prompt="[Y/n]"
+	[[ "$2" == yes ]] && prompt="[y/N]"
+	read -rp "Is $1 at the keyboard to choose their own password? ${prompt} " answer
+	case "${answer}" in
+	[Yy]*) echo no ;;
+	[Nn]*) echo yes ;;
+	*) echo "$2" ;;
+	esac
 }
 
-# homectl create, repeated until it succeeds. It asks for the password itself,
+# homectl create, retried until it succeeds or is skipped (a home too big for
+# the free space, a UID already taken). homectl asks for the password itself,
 # twice, and again if the password is too weak.
 create() {
-	local name=$1
+	local name=$1 answer
 	shift
 	echo "Type ${name}'s password. It encrypts their home; localadmin can't recover it."
-	until homectl create "$@"; do
-		read -rp "Creating ${name} failed. Press Enter to try again. " _
+	until homectl create "${name}" "$@"; do
+		read -rp "Creating ${name} failed. [R]etry, or [s]kip (add them later with ujust homed-user)? " answer
+		if [[ "${answer}" =~ ^[Ss] ]]; then
+			echo "Skipped ${name}."
+			return 0
+		fi
 	done
 	echo "Created ${name}."
 }
 
+exists() { homectl inspect "$1" >/dev/null 2>&1; }
+
 echo
 echo "=== Daily user accounts ==="
-echo "Each account's home is encrypted with its own password;"
-echo "localadmin can't open it."
+echo "Each account's home is encrypted with its own password; localadmin can't open it."
 
-seeded=0
-for record in "${STAGE}"/*.json; do
-	[[ -e "${record}" ]] || continue
-	seeded=1
-	name="$(jq -r .userName "${record}")"
-	echo
-	echo "--- ${name} ($(jq -r '.realName // .userName' "${record}"), $(jq -r '(.diskSize // 107374182400) / 1073741824 | floor' "${record}") GB home, from the seed stick)"
-	create "${name}" --identity="${record}" --password-change-now="$(change_at_login "${name}")"
-done
+listed=0
+if [[ -f "${DEFAULTS}" ]]; then
+	# The list comes in on fd 3: stdin stays the console, for prompts and passwords.
+	while IFS= read -r user <&3; do
+		listed=1
+		name="$(jq -r .userName <<<"${user}")"
+		real="$(jq -r '.realName // .userName' <<<"${user}")"
+		size="$(jq -r '(.diskSize // 107374182400) / 1073741824 | floor' <<<"${user}")"
+		uid="$(jq -r '.uid // empty' <<<"${user}")"
+		shell="$(jq -r '.shell // empty' <<<"${user}")"
+		must_change="$(jq -r 'if .passwordChangeNow then "yes" else "no" end' <<<"${user}")"
+		echo
+		echo "--- ${name}: ${real}, ${size} GB home${uid:+, UID ${uid}}${shell:+, ${shell}}"
+		if exists "${name}"; then
+			echo "${name} already exists here."
+			continue
+		fi
+		read -rp "[C]reate ${name} now, or [s]kip to restore a backed-up home later? " choice
+		if [[ "${choice}" =~ ^[Ss] ]]; then
+			echo "Skipped. Later, as localadmin: ujust restore-home ${name} <backup folder>"
+			continue
+		fi
+		args=(--real-name="${real}" --storage=luks --disk-size="${size}G")
+		[[ -n "${uid}" ]] && args+=(--uid="${uid}")
+		if [[ -n "${shell}" ]]; then
+			if grep -qxF "${shell}" "${SHELLS}" 2>/dev/null; then
+				args+=(--shell="${shell}")
+			else
+				echo "${shell} isn't installed here (not in /etc/shells); using the default shell."
+			fi
+		fi
+		args+=(--password-change-now="$(change_at_login "${name}" "${must_change}")")
+		create "${name}" "${args[@]}"
+	done 3< <(jq -c '.users[]?' "${DEFAULTS}")
+fi
 
-if ((seeded)); then
+if ((listed)); then
 	read -rp "Create another user now? [y/N] " again
 	[[ "${again}" =~ ^[Yy] ]] && more=1 || more=0
 elif [[ -z "$(homectl list --no-legend 2>/dev/null)" ]]; then
-	more=1
+	read -rp "Create the first user now? (Answer n only if you'll restore a backed-up home.) [Y/n] " first
+	[[ "${first}" =~ ^[Nn] ]] && more=0 || more=1
 else
 	more=0
 fi
@@ -62,24 +101,21 @@ fi
 while ((more)); do
 	echo
 	read -rp "Username (lowercase, e.g. chris): " name
-	if [[ ! "${name}" =~ ${NAME_RE} || "${name}" == localadmin ]]; then
+	if [[ ! "${name}" =~ ${NAME_RE} || "${name}" == localadmin ]] || exists "${name}"; then
 		echo "Not a valid new username."
 		continue
 	fi
 	read -rp "Full name: " real
 	read -rp "Home size in GB [100]: " size
 	size="${size:-100}"
-	if [[ ! "${size}" =~ ^[0-9]+$ ]] || ((size < 10)); then
-		echo "Size must be a whole number of GB, 10 or more."
+	if [[ ! "${size}" =~ ^[0-9]{1,4}$ ]] || ((size < 10 || size > 4096)); then
+		echo "Size must be a whole number of GB, 10 to 4096."
 		continue
 	fi
-	create "${name}" "${name}" --real-name="${real}" --storage=luks --disk-size="${size}G" \
-		--password-change-now="$(change_at_login "${name}")"
+	create "${name}" --real-name="${real}" --storage=luks --disk-size="${size}G" \
+		--password-change-now="$(change_at_login "${name}" no)"
 	read -rp "Create another user? [y/N] " again
 	[[ "${again}" =~ ^[Yy] ]] || more=0
 done
 
 "${LIBEXEC}/ensure-subids"
-rm -rf "${STAGE}" "${ROOT}/run/daily-driver/skel" 2>/dev/null || true
-mkdir -p "${ROOT}/var/lib/daily-driver"
-touch "${ROOT}/var/lib/daily-driver/users-created"

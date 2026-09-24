@@ -14,8 +14,9 @@ Read in this order. Each page links to the next level of detail.
 5. **[PROVENANCE.md](PROVENANCE.md)**: the full inventory: every package,
    file, service change, Flatpak and recipe this repository adds, and every
    piece of state a machine creates. On a machine: `ujust provenance <path>`.
-6. **[runbooks/](runbooks/)**: doing things. [first-boot](runbooks/first-boot.md),
-   [upgrade](runbooks/upgrade.md), [reinstall](runbooks/reinstall.md),
+6. **[runbooks/](runbooks/)**: doing things. [reinstall](runbooks/reinstall.md),
+   [machine-defaults](runbooks/machine-defaults.md), [first-boot](runbooks/first-boot.md),
+   [home-backup](runbooks/home-backup.md), [upgrade](runbooks/upgrade.md),
    [recover](runbooks/recover.md).
 
 The per-user half (git identity, GitHub sign-in) is the separate `dotfiles`

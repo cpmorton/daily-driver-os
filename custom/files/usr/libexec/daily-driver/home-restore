@@ -1,0 +1,67 @@
+#!/usr/bin/bash
+# Restore one daily user's encrypted home from a home-backup folder.
+#   home-restore USER DIR        run as root (localadmin with sudo)
+#
+# USER must not exist on this install yet: at first boot, choose "skip" for
+# them, or remove an empty home made by mistake with `homectl remove USER`.
+# This puts the image back at /var/home/USER.home, trusts the old install's
+# homed public key (/etc/systemd/home/*.public) so homed accepts the record it
+# signed, and registers the home. USER then logs in with their old password.
+# See docs/decisions/0022-home-backup-and-restore.md.
+set -euo pipefail
+
+readonly NAME_RE='^[a-z_][a-z0-9_-]{0,31}$'
+readonly HOME_DIR="${HOME_DIR:-/var/home}"                          # test seam
+readonly HOMED_KEY="${HOMED_KEY:-/var/lib/systemd/home/local.public}" # test seam
+readonly TRUST_DIR="${TRUST_DIR:-/etc/systemd/home}"                 # test seam
+readonly LIBEXEC="${LIBEXEC:-/usr/libexec/daily-driver}"
+
+die() {
+	echo "home-restore: $*" >&2
+	exit 1
+}
+
+[[ $# -eq 2 ]] || die "usage: home-restore USER DIR"
+user=$1 dir=$2
+[[ "${user}" =~ ${NAME_RE} && "${user}" != localadmin ]] || die "invalid user name"
+for f in "${user}.home.zst" "${user}.public" "${user}.sha256"; do
+	[[ -f "${dir}/${f}" ]] || die "${dir} has no ${f}; is it a home-backup folder?"
+done
+if homectl inspect "${user}" >/dev/null 2>&1; then
+	die "${user} already exists here. If that's an empty home made at first boot, remove it first: sudo homectl remove ${user}"
+fi
+image="${HOME_DIR}/${user}.home"
+[[ ! -e "${image}" ]] || die "${image} already exists"
+
+echo "Checking the backup..."
+(cd "${dir}" && sha256sum --quiet -c "${user}.sha256") || die "checksums don't match; the backup is damaged"
+
+echo "Restoring ${user} to ${image}..."
+umask 077 # the image's LUKS header must never be readable by other users
+zstd -d -q --sparse -f "${dir}/${user}.home.zst" -o "${image}.partial"
+chmod 0600 "${image}.partial"
+mv "${image}.partial" "${image}"
+restorecon -F "${image}" 2>/dev/null || true
+
+# The record inside the image is signed by the old install's key.
+if ! cmp -s "${dir}/${user}.public" "${HOMED_KEY}"; then
+	mkdir -p "${TRUST_DIR}"
+	key="${TRUST_DIR}/restored-$(sha256sum "${dir}/${user}.public" | cut -c1-12).public"
+	install -m 0644 "${dir}/${user}.public" "${key}"
+	echo "Trusting the old install's signing key: ${key}"
+fi
+
+# Newer homectl registers it directly; otherwise homed finds it on restart.
+# [VERIFY on hardware: which path this systemd takes, and that it's accepted]
+if ! homectl adopt "${image}" 2>/dev/null; then
+	systemctl restart systemd-homed.service
+fi
+for _ in 1 2 3 4 5; do
+	homectl inspect "${user}" >/dev/null 2>&1 && break
+	sleep 1
+done
+homectl inspect "${user}" >/dev/null 2>&1 ||
+	die "homed didn't pick up ${image}; see: journalctl -u systemd-homed"
+
+"${LIBEXEC}/ensure-subids"
+echo "Restored. ${user} can log in with the password they had before."

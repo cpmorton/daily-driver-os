@@ -153,12 +153,25 @@ upstream source on 2026-09-23; the ecosystem moves fast, so the
 : Manages self-contained, LUKS-encrypted user homes. Daily users are homed
   users. [decision 0008](decisions/0008-homed-users-on-a-separate-partition.md)
 
-**Seed stick, `DDSEED`**
-: A FAT32/exFAT volume carrying one machine's hostname, its daily users'
-  names and home sizes, and optional files for their homes; never passwords.
-  Imported once at first boot and then deleted.
-  [decision 0018](decisions/0018-provisioning-seed-stick.md),
-  [decision 0019](decisions/0019-no-seeded-passwords.md)
+**Machine defaults, `defaults.json`**
+: Pre-filled first-boot answers for one machine (hostname, localadmin's
+  password hash, disk unlock, users, extra Flatpaks), stored on its EFI
+  partition from Windows by `Set-DailyDriverDefaults.ps1`. Never a user's
+  password. [decision 0020](decisions/0020-machine-defaults-on-the-esp.md)
+
+**EFI system partition (ESP)**
+: The small FAT32 partition the firmware boots from. Windows and Linux share
+  it in a dual boot; reinstalling Linux doesn't erase it.
+
+**LUKS2, TPM2, PCR 7, FIDO2**
+: LUKS2 is Linux disk encryption. A TPM2 chip can hold its key and release it
+  only while PCR 7 (its record of the Secure Boot state) matches enrollment
+  time. FIDO2 security keys (YubiKey) can unlock it with a touch.
+  `systemd-cryptenroll` enrolls both, plus recovery keys.
+  [decision 0021](decisions/0021-encrypted-root.md)
+
+**zram**
+: Swap in compressed RAM; Fedora's default. Nothing reaches the disk.
 
 **bootupd, static GRUB config**
 : bootc's bootloader updater. Its GRUB menu is a fixed file that never scans

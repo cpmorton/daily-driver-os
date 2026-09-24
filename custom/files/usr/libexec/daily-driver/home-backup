@@ -1,0 +1,62 @@
+#!/usr/bin/bash
+# Back up one daily user's encrypted home to a folder (a USB drive, say).
+#   home-backup USER DIR        run as root, while USER is logged out
+#
+# A homed LUKS home is a single encrypted file, /var/home/USER.home, so this
+# copies it as it is: it stays encrypted, and only USER's password opens it.
+# zstd shrinks the unused space (holes, since homed trims on logout), so the
+# copy is roughly the size of the data. Writes, in DIR:
+#   USER.home.zst   the image
+#   USER.public     this install's homed public key, which signed USER's record;
+#                   home-restore trusts it on the new install
+#   USER.json       the record without secrets (for reference)
+#   USER.sha256     checksums of the above
+# See docs/decisions/0022-home-backup-and-restore.md.
+set -euo pipefail
+
+readonly NAME_RE='^[a-z_][a-z0-9_-]{0,31}$'
+readonly HOME_DIR="${HOME_DIR:-/var/home}"                          # test seam
+readonly HOMED_KEY="${HOMED_KEY:-/var/lib/systemd/home/local.public}" # test seam
+
+die() {
+	echo "home-backup: $*" >&2
+	exit 1
+}
+
+[[ $# -eq 2 ]] || die "usage: home-backup USER DIR"
+user=$1 dir=$2
+[[ "${user}" =~ ${NAME_RE} ]] || die "invalid user name"
+[[ -d "${dir}" && -w "${dir}" ]] || die "${dir} isn't a writable folder"
+
+record="$(homectl inspect --json=short "${user}" 2>/dev/null)" || die "${user} isn't a homed user here"
+state() { homectl inspect --json=short "${user}" | jq -r '[.status[]?.state][0] // "unknown"'; }
+[[ "$(jq -r '.storage // empty' <<<"${record}")" == luks ]] || die "${user}'s home isn't a LUKS image"
+[[ "$(state)" == inactive ]] ||
+	die "${user} is logged in or their home is in use ($(state)). Log them out; if it stays active: sudo loginctl terminate-user ${user}"
+
+image="$(jq -r --arg d "${HOME_DIR}/${user}.home" '[.binding[]?.imagePath, .imagePath] | map(select(. != null)) | first // $d' <<<"${record}")"
+[[ -f "${image}" ]] || die "no image at ${image}"
+[[ -f "${HOMED_KEY}" ]] || die "no homed public key at ${HOMED_KEY}"
+
+# Space: the compressed copy is at most the image's allocated size.
+need="$(($(stat -c '%b * %B' "${image}")))"
+avail="$(df --output=avail -B1 "${dir}" | tail -1 | tr -d ' ')"
+((avail > need)) || die "${dir} has $((avail >> 30)) GiB free; ${user}'s home needs up to $((need >> 30)) GiB"
+
+umask 077
+echo "Backing up ${user} ($((need >> 30)) GiB in use) to ${dir}. Don't log in as ${user} until it finishes."
+# A login and logout during the copy leaves the state "inactive" at both ends,
+# but changes the image's modification and change times.
+before="$(stat -c '%Y.%Z' "${image}")"
+zstd -T0 -3 -q -f "${image}" -o "${dir}/${user}.home.zst.partial"
+if [[ "$(state)" != inactive || "$(stat -c '%Y.%Z' "${image}")" != "${before}" ]]; then
+	rm -f "${dir}/${user}.home.zst.partial"
+	die "${user}'s home changed during the backup; nothing kept. Try again while they're logged out."
+fi
+mv -f "${dir}/${user}.home.zst.partial" "${dir}/${user}.home.zst"
+cp "${HOMED_KEY}" "${dir}/${user}.public"
+homectl inspect --json=pretty --export-format=stripped "${user}" >"${dir}/${user}.json" 2>/dev/null || true
+(cd "${dir}" && sha256sum "${user}.home.zst" "${user}.public" >"${user}.sha256")
+sync -f "${dir}/${user}.home.zst"
+echo "Done: $(du -h "${dir}/${user}.home.zst" | cut -f1) in ${dir}/${user}.home.zst."
+echo "Restore on a new install, as localadmin: ujust restore-home ${user} <this folder>"

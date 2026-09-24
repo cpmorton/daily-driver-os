@@ -13,11 +13,12 @@ set -xeuo pipefail
 #   1. /opt, /usr/local, /root become real, image-owned directories
 #   2. Chrome, VS Code, gh, chezmoi, systemd-homed, and the Docker-compatible
 #      front end to rootless podman (podman-docker, podman-compose)
-#   3. root locked; first boot: seed stick import (never passwords), then
-#      localadmin's password and the daily users, typed on tty1
+#   3. root locked; first boot on tty1: hostname, localadmin's password,
+#      disk unlock and daily users, offering the machine defaults (EFI partition)
 #   4. PAM: homed + pam_access (localadmin: local logins only)
 #   5. rootful podman off, rootless per-user socket on
-#   6. assertions: fail the build rather than ship a missing control
+#   6. initramfs rebuilt with TPM2 and FIDO2 unlock for the encrypted root
+#   7. assertions: fail the build rather than ship a missing control
 #
 # Nothing secret belongs here: the repository and the image are public.
 ###############################################################################
@@ -78,6 +79,9 @@ echo "::group:: Packages"
 # podman-docker: /usr/bin/docker runs podman, so tools that hardcode `docker`
 # (VS Code Dev Containers by default) use rootless podman with no per-user
 # settings. See docs/decisions/0006-rootless-podman-only.md.
+# tpm2-tools and libfido2: dracut adds TPM2 and FIDO2 unlock to the initramfs
+# only when these are present (docs/decisions/0021-encrypted-root.md).
+# zstd: `ujust backup-home` compresses home images with it.
 dnf5 install -y \
 	google-chrome-stable \
 	code \
@@ -85,7 +89,10 @@ dnf5 install -y \
 	podman-compose \
 	gh \
 	chezmoi \
-	/usr/bin/homectl
+	/usr/bin/homectl \
+	tpm2-tools \
+	libfido2 \
+	zstd
 
 # docker-compose -> podman-compose: the Dev Containers extension's default
 # compose command. It lives in /usr/local/bin because /usr/local only became a
@@ -101,16 +108,17 @@ echo "::group:: Accounts"
 # option produces. The shell stays, so `sudo -i` and emergency sulogin work.
 passwd -l root
 
-# localadmin: sysusers.d creates it (UID 1000), locked, at boot. Its password
-# is asked on tty1 before GDM starts, so no hash ever enters the image or a
-# seed stick. Daily users: names from the seed or tty1, passwords on tty1.
+# localadmin: sysusers.d creates it (UID 1000), locked, at boot. First boot
+# sets its password from the machine defaults' hash (written to the EFI
+# partition from Windows) or asks on tty1, so no hash ever enters the image.
+# Daily users' passwords are always typed on tty1.
+# See docs/decisions/0020-machine-defaults-on-the-esp.md.
 chmod 0755 /usr/libexec/daily-driver/*
 systemctl enable localadmin-home.service
-systemctl enable daily-driver-seed.service
-systemctl enable localadmin-firstboot.service
-systemctl enable daily-driver-users.service
-# Superseded by daily-driver-users.service, which also handles the seed and
-# works when localadmin already exists (upstream's wizard skips then).
+systemctl enable daily-driver-defaults.service
+systemctl enable daily-driver-firstboot.service
+# Superseded by daily-driver-firstboot.service, which works when localadmin
+# already exists (upstream's wizard skips then).
 systemctl mask systemd-homed-firstboot.service
 
 echo "::endgroup::"
@@ -159,6 +167,25 @@ systemctl mask debug-shell.service
 # GNOME "Remote Login" (system RDP) authenticates through GDM's PAM stack.
 # Until it is proven to set PAM_RHOST, it could bypass the localadmin rule.
 systemctl mask gnome-remote-desktop.service
+
+echo "::endgroup::"
+
+echo "::group:: Initramfs: TPM2 and FIDO2 unlock"
+
+# The base image's initramfs was built without tpm2-tools, so it can't unlock
+# the root with a TPM. Rebuild it now that the packages above are installed,
+# with the modules 50-daily-driver-unlock.conf adds. --no-hostonly and
+# --add ostree match how the base image built it; a missing ostree module
+# would make the image unbootable, so the assertions below check for it.
+# See docs/decisions/0021-encrypted-root.md.
+mapfile -t kernels < <(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d -printf '%f\n')
+if [[ "${#kernels[@]}" -ne 1 ]]; then
+	echo "expected exactly one kernel in /usr/lib/modules, found: ${kernels[*]}" >&2
+	exit 1
+fi
+INITRAMFS="/usr/lib/modules/${kernels[0]}/initramfs.img"
+DRACUT_NO_XATTR=1 dracut --no-hostonly --reproducible --add ostree --tmpdir /tmp \
+	--force --kver "${kernels[0]}" "${INITRAMFS}"
 
 echo "::endgroup::"
 
@@ -218,7 +245,8 @@ git config --system --get init.defaultBranch
 grep -qP '^/etc/gitconfig\tthis repository' "${MANIFEST}"
 grep -qP '^/usr/lib/systemd/system/brew-setup.service\tublue-os/brew$' "${MANIFEST}"
 test -x /usr/sbin/mkhomedir_helper
-for helper in ensure-subids first-users localadmin-needs-password seed-import windows-boot-entry; do
+for helper in defaults-import disk-unlock ensure-subids firstboot first-users home-backup \
+	home-restore localadmin-needs-password windows-boot-entry; do
 	test -x "/usr/libexec/daily-driver/${helper}"
 done
 # localadmin is UID 1000, which is what ublue-os/brew hands the prefix to.
@@ -252,6 +280,17 @@ grep -qx 'PermitRootLogin no' /etc/ssh/sshd_config.d/10-hardening.conf
 
 # /tmp is tmpfs: Fedora wires tmp.mount into local-fs.target. Assert it.
 test -e /usr/lib/systemd/system/local-fs.target.wants/tmp.mount
+
+# The rebuilt initramfs can boot this image and unlock its root by TPM2 or a
+# security key, and a passphrase is always the fallback.
+initramfs_files="$(lsinitrd "${INITRAMFS}")"
+for needed in ostree-prepare-root systemd-cryptsetup \
+	libcryptsetup-token-systemd-tpm2.so libcryptsetup-token-systemd-fido2.so; do
+	grep -qF "${needed}" <<<"${initramfs_files}" || {
+		echo "initramfs lacks ${needed}" >&2
+		exit 1
+	}
+done
 
 # Rootful podman is really off.
 [[ "$(systemctl is-enabled podman.socket 2>/dev/null || true)" == masked ]]

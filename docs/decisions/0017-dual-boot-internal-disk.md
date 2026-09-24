@@ -5,6 +5,10 @@
 - **Supersedes:** [0008](0008-homed-users-on-a-separate-partition.md) (OS on a
   USB drive, homes on a separate internal partition)
 
+## Amendments
+
+- 2026-09-23, [0021](0021-encrypted-root.md): tick *Encrypt my data* in the installer; the Linux root is LUKS2, unlocked by TPM2, security key or passphrase. [0020](0020-machine-defaults-on-the-esp.md) also keeps a small defaults file on the shared EFI partition.
+
 ## Context
 
 Machines already run Windows on their only internal disk. Installing to

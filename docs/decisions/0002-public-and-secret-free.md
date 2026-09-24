@@ -7,6 +7,7 @@
 
 - 2026-09-23, [0018](0018-provisioning-seed-stick.md): per-machine secrets travel on a seed stick that first boot imports and wipes; still never in the repository or the ISO.
 - 2026-09-23, [0019](0019-no-seeded-passwords.md): passwords aren't seeded at all; they're typed at first boot. Only skel folders a seed may carry can hold private files.
+- 2026-09-23, [0020](0020-machine-defaults-on-the-esp.md): localadmin's password hash may sit in the machine defaults on the EFI partition (per machine, written from Windows); never in the repository or the ISO.
 
 ## Context
 

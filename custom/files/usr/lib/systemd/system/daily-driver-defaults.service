@@ -1,0 +1,17 @@
+# First boot, step 0: read this machine's defaults from its EFI partition
+# (written from Windows by Set-DailyDriverDefaults.ps1). Non-interactive; runs
+# every boot until first boot finishes, and before Flatpak's preinstall so the
+# defaults' extra apps install with the image's.
+# See docs/decisions/0020-machine-defaults-on-the-esp.md.
+[Unit]
+Description=Read machine defaults from the EFI partition (first boot)
+ConditionPathExists=!/var/lib/daily-driver/firstboot-done
+After=local-fs.target
+Before=daily-driver-firstboot.service flatpak-preinstall.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/daily-driver/defaults-import
+
+[Install]
+WantedBy=multi-user.target

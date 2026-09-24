@@ -122,3 +122,18 @@ windows-entry:
         exit 1
     fi
     sudo /usr/libexec/daily-driver/windows-boot-entry
+
+# Back up a logged-out user's encrypted home to a folder, e.g. on a USB drive.
+[group('Daily driver')]
+backup-home user folder:
+    sudo /usr/libexec/daily-driver/home-backup "{{ user }}" "{{ folder }}"
+
+# Restore a home saved by backup-home; the user must not exist here yet.
+[group('Daily driver')]
+restore-home user folder:
+    sudo /usr/libexec/daily-driver/home-restore "{{ user }}" "{{ folder }}"
+
+# Change how the encrypted disk unlocks at boot: tpm2, tpm2-pin, fido2 or passphrase.
+[group('Daily driver')]
+disk-unlock method="":
+    sudo /usr/libexec/daily-driver/disk-unlock "{{ method }}"

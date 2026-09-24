@@ -3,8 +3,8 @@ _build_*
 output
 _build-*/**
 
-# daily-driver-os: seed sticks may hold private files in skel folders. Never
-# commit one, even by accident (decisions 0018, 0019).
-daily-driver-seed/
-*.seed.json
+# daily-driver-os: machine defaults hold localadmin's password hash. Never
+# commit one, even by accident (decision 0020).
+defaults.json
+EFI/
 localadmin.hash

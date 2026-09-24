@@ -24,9 +24,14 @@ the way they are; check there before "fixing" something deliberate.
 - **`/opt`, `/usr/local` and `/root` are real directories.** Never reintroduce
   upstream's `/opt -> /var/opt` symlink. Nothing may write into `/root` during
   the build.
-- **No seeded passwords.** Passwords are typed at first boot, never carried
-  by a seed stick (decision 0019). Never commit a `daily-driver-seed/` folder
-  or a password hash, even a test one that looks real.
+- **No stored user passwords.** Daily users' passwords are typed at first
+  boot; only localadmin's *hash* may come from the machine defaults on the EFI
+  partition (decisions 0019, 0020). Never commit a `defaults.json` or a
+  password hash, even a test one that looks real (published test vectors in
+  `tests/` excepted).
+- **Encrypted root.** Nothing may weaken disk unlock: the initramfs
+  assertions in `70-daily-driver.sh` stay, and the passphrase stays a fallback
+  (decision 0021).
 - **Access model.** Root stays locked. localadmin stays local-only (pam_access +
   sshd), with no SSH key. Rootful podman stays masked. Changing any of these
   needs the user's explicit say-so.

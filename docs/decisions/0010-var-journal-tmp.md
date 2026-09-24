@@ -3,6 +3,10 @@
 - **Status:** Accepted
 - **Date:** 2026-09-23
 
+## Amendments
+
+- 2026-09-23, [0021](0021-encrypted-root.md): swap is Fedora's zram (RAM only, up to 8 GiB), so nothing swaps to disk; `/tmp` spills into it under pressure. `/var` is now on the encrypted root.
+
 ## Context
 
 The original request was to keep "some parts of `/var` around" (Flatpaks,

@@ -10,8 +10,10 @@ At the GRUB menu, press `e` and append to the `linux` line:
 
     systemd.setenv=SYSTEMD_SULOGIN_FORCE=1 systemd.unit=emergency.target
 
-Anyone with physical access can do this: the Linux system partition isn't
-encrypted. Daily users' homes are LUKS and stay locked.
+The disk still has to unlock first. With `passphrase`, `tpm2-pin` or `fido2`
+that takes the secret; with plain `tpm2` it doesn't, so anyone at the keyboard
+can do this ([decision 0021](../decisions/0021-encrypted-root.md)). Daily
+users' homes are LUKS and stay locked either way.
 
 ## Forgotten localadmin password
 
@@ -23,9 +25,21 @@ Get a root shell as above, then `passwd localadmin`.
 If a Windows update made Windows the default, change the order back in the
 firmware settings (the menu's **UEFI Firmware Settings** entry gets you there).
 
+## The disk asks for its passphrase after an update
+
+A firmware or Secure Boot database update changed what the TPM measured
+(PCR 7), so the TPM no longer releases the key. Type the passphrase (or the
+recovery key), then re-enroll as localadmin: `ujust disk-unlock tpm2`.
+
+## A lost or broken security key
+
+Unlock with the passphrase, the recovery key or the spare key, then
+`ujust disk-unlock fido2` enrolls a new one. Remove the lost key's slot with
+`sudo systemd-cryptenroll --wipe-slot=fido2 <device>` and re-enroll the keys
+you still have (`sudo systemd-cryptenroll <device>` lists the slots; the
+device is the `crypto_LUKS` one in `lsblk -f`).
+
 ## An encrypted home from another install
 
-A home copied back after a reinstall is signed by the old installation's key.
-Recent systemd can take it over with `homectl adopt`.
-[VERIFY that `homectl adopt` exists in the image's systemd and how it treats
-LUKS homes, before relying on it.]
+Use `ujust restore-home`: [home-backup.md](home-backup.md). It trusts the old
+install's signing key and registers the home.
