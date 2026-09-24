@@ -68,11 +68,19 @@ Everything under `custom/files/` lands at the same path in the image.
 | `/etc/tmpfiles.d/podman-docker.conf` | Symlink to `/dev/null`: masks the system `/run/docker.sock` → rootful socket link | [0006](decisions/0006-rootless-podman-only.md) |
 | `/usr/lib/environment.d/60-docker-host.conf` | `DOCKER_HOST` = the user's rootless podman socket, for every app | [0006](decisions/0006-rootless-podman-only.md) |
 | `/usr/lib/systemd/journald.conf.d/60-volatile.conf` | Journal in RAM only, 256M cap | [0010](decisions/0010-var-journal-tmp.md) |
-| `/usr/lib/systemd/system/brew-setup.service.d/10-var-home.conf` | Unpack Homebrew only after `/var/home` is mounted | [0011](decisions/0011-homebrew-single-owner.md) |
-| `/usr/lib/systemd/system/localadmin-firstboot.service` | Asks for localadmin's password on tty1 before GDM, once | [0005](decisions/0005-accounts-and-access.md) |
+| `/usr/lib/systemd/system/brew-setup.service.d/10-var-home.conf` | Unpack Homebrew only after `/var/home` is mounted (a no-op unless it's a separate mount) | [0011](decisions/0011-homebrew-single-owner.md) |
+| `/usr/lib/systemd/system/localadmin-firstboot.service` | Asks for localadmin's password on tty1 before GDM, once, unless the seed set it | [0005](decisions/0005-accounts-and-access.md), [0018](decisions/0018-provisioning-seed-stick.md) |
 | `/usr/lib/systemd/system/localadmin-home.service` | Creates localadmin's home from `/etc/skel` | [0005](decisions/0005-accounts-and-access.md) |
 | `/usr/lib/systemd/user/vscode-devcontainers-ext.service` | Installs the Dev Containers extension once per user | [0007](decisions/0007-developer-experience-baked-in.md) |
-| `/usr/lib/sysusers.d/50-localadmin.conf` | Creates localadmin (UID 1999) in `wheel` | [0005](decisions/0005-accounts-and-access.md) |
+| `/usr/lib/sysusers.d/50-localadmin.conf` | Creates localadmin (UID 1000) in `wheel` | [0005](decisions/0005-accounts-and-access.md), [0018](decisions/0018-provisioning-seed-stick.md) |
+| `/usr/lib/systemd/system/daily-driver-seed.service` | First boot: imports a `DDSEED` seed stick | [0018](decisions/0018-provisioning-seed-stick.md) |
+| `/usr/lib/systemd/system/daily-driver-users.service` | First boot: creates seeded users, or asks for users on tty1 | [0018](decisions/0018-provisioning-seed-stick.md) |
+| `/usr/lib/systemd/system/windows-boot-entry.service` | Adds Windows to the boot menu once | [0017](decisions/0017-dual-boot-internal-disk.md) |
+| `/usr/libexec/daily-driver/seed-import` | Validates and applies a seed, stages user records in RAM, deletes the seed | [0018](decisions/0018-provisioning-seed-stick.md) |
+| `/usr/libexec/daily-driver/first-users` | Creates homed users from staged records, or interactively | [0018](decisions/0018-provisioning-seed-stick.md) |
+| `/usr/libexec/daily-driver/localadmin-needs-password` | Lets the tty1 password prompt run only while localadmin is locked | [0018](decisions/0018-provisioning-seed-stick.md) |
+| `/usr/libexec/daily-driver/ensure-subids` | Subordinate UID/GID ranges for homed users (rootless podman) | [0006](decisions/0006-rootless-podman-only.md), [0018](decisions/0018-provisioning-seed-stick.md) |
+| `/usr/libexec/daily-driver/windows-boot-entry` | Finds the Windows boot manager and writes `/boot/grub2/custom.cfg` | [0017](decisions/0017-dual-boot-internal-disk.md) |
 
 ## Changes made by build steps
 
@@ -98,6 +106,10 @@ Not files in `custom/`, so easy to miss.
 | `podman.socket` (user, every account) | enabled globally | 70 | [0006](decisions/0006-rootless-podman-only.md) |
 | `vscode-devcontainers-ext.service` (user) | enabled globally | 70 | [0007](decisions/0007-developer-experience-baked-in.md) |
 | `localadmin-firstboot.service` | enabled | 70 | [0005](decisions/0005-accounts-and-access.md) |
+| `daily-driver-seed.service` | enabled | 70 | [0018](decisions/0018-provisioning-seed-stick.md) |
+| `daily-driver-users.service` | enabled | 70 | [0018](decisions/0018-provisioning-seed-stick.md) |
+| `systemd-homed-firstboot.service` | masked: replaced by `daily-driver-users.service` | 70 | [0018](decisions/0018-provisioning-seed-stick.md) |
+| `windows-boot-entry.service` | enabled | 70 | [0017](decisions/0017-dual-boot-internal-disk.md) |
 | `localadmin-home.service` | enabled | 70 | [0005](decisions/0005-accounts-and-access.md) |
 | `systemd-homed.service` | enabled | 70 | [0008](decisions/0008-homed-users-on-a-separate-partition.md) |
 | `debug-shell.service` | masked | 70 | [0005](decisions/0005-accounts-and-access.md) |
@@ -133,9 +145,10 @@ and `uupd-resume.timer` enabled; user units `brew-preinstall.service` and
 
 | Recipe | Does | Why |
 | --- | --- | --- |
-| `home-partition` | Moves `/var/home` onto an already-formatted partition | [0008](decisions/0008-homed-users-on-a-separate-partition.md) |
-| `homed-user` | Creates a LUKS homed user with subordinate IDs | [0008](decisions/0008-homed-users-on-a-separate-partition.md) |
-| `brew-owner` | Hands the Homebrew prefix and timers to one user | [0011](decisions/0011-homebrew-single-owner.md) |
+| `homed-user` | Creates a LUKS homed user with subordinate IDs | [0017](decisions/0017-dual-boot-internal-disk.md) |
+| `brew-owner` | Hands the Homebrew prefix and timers to one user (default owner: localadmin) | [0011](decisions/0011-homebrew-single-owner.md) |
+| `windows-entry` | Re-detects Windows and rewrites its boot menu entry | [0017](decisions/0017-dual-boot-internal-disk.md) |
+| `localadmin-hash` | Prints localadmin's password hash, for the secret store that seeds machines | [0018](decisions/0018-provisioning-seed-stick.md) |
 | `dotfiles` | Applies the dotfiles repository with chezmoi | [0003](decisions/0003-two-repositories.md) |
 | `etc-drift` | Lists `/etc` files that no longer follow the image | [0003](decisions/0003-two-repositories.md) |
 | `provenance` | Explains where one path came from | This page |
@@ -162,24 +175,26 @@ New repository files outside the image:
 | --- | --- | --- |
 | `.github/workflows/build-iso.yml` | Builds the installer ISO on demand and uploads it as an artifact | [0016](decisions/0016-installer-built-in-ci.md) |
 | `.gitattributes` | LF line endings on every checkout, Windows included | [0016](decisions/0016-installer-built-in-ci.md) |
+| `.gitignore` (additions) | Refuses seed folders and hash files | [0018](decisions/0018-provisioning-seed-stick.md) |
+| `tools/windows/New-DailyDriverSeed.ps1` | Writes a seed stick on Windows (PowerShell 5.1) | [0018](decisions/0018-provisioning-seed-stick.md) |
 | `CLAUDE.md`, `.claude/` | Claude Code rules and upstream's agent skills | [0012](decisions/0012-claude.md) |
-| `docs/`, `tests/contract/daily-driver_test.bats`, `tests/contract/provenance_test.bats` | This documentation, and the tests that keep it true | This page |
+| `docs/`, `tests/contract/daily-driver_test.bats`, `tests/contract/daily-driver-helpers_test.bats`, `tests/contract/provenance_test.bats` | This documentation, and the tests that keep it and the first-boot helpers true | This page |
 
 ## Created on each machine, not in the image
 
-This is state a reinstall wipes (on the stick) or keeps (on the home partition).
+A reinstall wipes all of this: it all lives in the Linux partition.
 
-| State | Created by | Where | Survives reinstall? |
-| --- | --- | --- | --- |
-| localadmin's password | `localadmin-firstboot.service` | `/etc/shadow` | No |
-| `/var/home` fstab entry | `ujust home-partition` | `/etc/fstab` | No: re-add ([runbook](runbooks/reinstall.md)) |
-| Daily users and their homes | `ujust homed-user` | `/var/home/<user>.home` | Yes (home partition) |
-| homed signing keys | systemd-homed, first start | `/var/lib/systemd/home/local.*` | **No: back them up** |
-| Subordinate IDs | `ujust homed-user` | `/etc/subuid`, `/etc/subgid` | No: re-run `ujust homed-user <user>` |
-| Homebrew owner | `ujust brew-owner` | `/etc/systemd/system/brew-*.service.d/` | No: re-run |
-| Homebrew and its packages | `brew-setup.service`, users | `/var/home/linuxbrew` | Yes (home partition) |
-| Flatpaks | `flatpak-preinstall.service` | `/var/lib/flatpak` | No: reinstalled on first boot |
-| Dev Containers extension | `vscode-devcontainers-ext.service` | `~/.vscode/extensions` | Yes (in the home) |
-| Git identity | the dotfiles | `~/.gitconfig` | Yes (in the home) |
-| GitHub token | the dotfiles' `gh auth login` | desktop keyring, in the home | Yes (in the home) |
-| Claude Code sign-in | `claude` on first run | `~/.claude*` | Yes (in the home) |
+| State | Created by | Where |
+| --- | --- | --- |
+| Hostname | seed stick, or the installer | `/etc/hostname` |
+| localadmin's password | seed stick hash, or `localadmin-firstboot.service` | `/etc/shadow` |
+| localadmin's home | `localadmin-home.service`, plus the seed's skel | `/var/home/localadmin` |
+| Seeded user records (with initial passwords) | `seed-import` | `/run/credstore` (RAM), deleted once the users exist |
+| Daily users and their encrypted homes | `daily-driver-users.service` or `ujust homed-user` | `/var/home/<user>.home` (one LUKS file each) |
+| homed's signing keys | systemd-homed, first start | `/var/lib/systemd/home/local.*` |
+| Subordinate IDs | `ensure-subids` | `/etc/subuid`, `/etc/subgid` |
+| Windows boot entry | `windows-boot-entry.service` | `/boot/grub2/custom.cfg` |
+| First-boot markers | the first-boot services | `/var/lib/daily-driver/`, `/var/lib/localadmin-firstboot/` |
+| Homebrew and its packages | `brew-setup.service`, then its owner | `/var/home/linuxbrew` (owner: localadmin unless `ujust brew-owner`) |
+| Flatpaks | `flatpak-preinstall.service` | `/var/lib/flatpak` |
+| Dev Containers extension, git identity, GitHub token, Claude Code sign-in | first login, the dotfiles, `claude` | inside each encrypted home |

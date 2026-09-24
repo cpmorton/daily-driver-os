@@ -13,7 +13,8 @@ set -xeuo pipefail
 #   1. /opt, /usr/local, /root become real, image-owned directories
 #   2. Chrome, VS Code, gh, chezmoi, systemd-homed, and the Docker-compatible
 #      front end to rootless podman (podman-docker, podman-compose)
-#   3. root locked; localadmin gets its password on tty1 at first boot
+#   3. root locked; first boot: seed stick import, then localadmin's
+#      password and the daily users (from the seed, or asked on tty1)
 #   4. PAM: homed + pam_access (localadmin: local logins only)
 #   5. rootful podman off, rootless per-user socket on
 #   6. assertions: fail the build rather than ship a missing control
@@ -100,10 +101,17 @@ echo "::group:: Accounts"
 # option produces. The shell stays, so `sudo -i` and emergency sulogin work.
 passwd -l root
 
-# localadmin: sysusers.d creates it, locked, at boot. The unit below prompts
-# for its password on tty1 before GDM starts, so no hash ever enters the image.
-systemctl enable localadmin-firstboot.service
+# localadmin: sysusers.d creates it (UID 1000), locked, at boot. Its password
+# comes from the DDSEED stick, or is asked on tty1 before GDM starts, so no
+# hash ever enters the image. Daily users: from the seed, or asked on tty1.
+chmod 0755 /usr/libexec/daily-driver/*
 systemctl enable localadmin-home.service
+systemctl enable daily-driver-seed.service
+systemctl enable localadmin-firstboot.service
+systemctl enable daily-driver-users.service
+# Superseded by daily-driver-users.service, which also handles the seed and
+# works when localadmin already exists (upstream's wizard skips then).
+systemctl mask systemd-homed-firstboot.service
 
 echo "::endgroup::"
 
@@ -142,6 +150,9 @@ systemctl --global enable podman.socket
 systemctl --global enable vscode-devcontainers-ext.service
 
 systemctl enable systemd-homed.service
+
+# Dual boot: add Windows to bootc's static GRUB menu.
+systemctl enable windows-boot-entry.service
 
 # No root shell on tty9 via a kernel argument.
 systemctl mask debug-shell.service
@@ -207,6 +218,11 @@ git config --system --get init.defaultBranch
 grep -qP '^/etc/gitconfig\tthis repository' "${MANIFEST}"
 grep -qP '^/usr/lib/systemd/system/brew-setup.service\tublue-os/brew$' "${MANIFEST}"
 test -x /usr/sbin/mkhomedir_helper
+for helper in ensure-subids first-users localadmin-needs-password seed-import windows-boot-entry; do
+	test -x "/usr/libexec/daily-driver/${helper}"
+done
+# localadmin is UID 1000, which is what ublue-os/brew hands the prefix to.
+grep -qE '^u[[:space:]]+localadmin[[:space:]]+1000[[:space:]]' /usr/lib/sysusers.d/50-localadmin.conf
 
 # PAM wiring, on both stacks: system-auth (console, GDM, sudo) and
 # password-auth (sshd).

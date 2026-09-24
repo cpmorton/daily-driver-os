@@ -50,11 +50,11 @@ line_of() {
 	grep -qx 'passwd -l root' "${PHASE}"
 }
 
-@test "localadmin: UID avoids the installer's first user and homed's range" {
+@test "localadmin: UID 1000, outside homed's range, in wheel" {
+	# 1000 is what ublue-os/brew assumes is "the first user"; homed users are
+	# 60001-60513 (decision 0005).
 	uid="$(awk '$1 == "u" && $2 == "localadmin" {print $3}' "${FILES}/usr/lib/sysusers.d/50-localadmin.conf")"
-	[ -n "${uid}" ]
-	[ "${uid}" -ne 1000 ]
-	[ "${uid}" -lt 60001 ] || [ "${uid}" -gt 60513 ]
+	[ "${uid}" = 1000 ]
 	grep -qE '^m[[:space:]]+localadmin[[:space:]]+wheel$' "${FILES}/usr/lib/sysusers.d/50-localadmin.conf"
 }
 

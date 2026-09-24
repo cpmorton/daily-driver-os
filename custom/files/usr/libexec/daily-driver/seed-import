@@ -1,0 +1,149 @@
+#!/usr/bin/bash
+# Import a DDSEED provisioning volume, once, at first boot.
+#
+# The installer ISO is public and generic; everything machine- or
+# person-specific comes from a FAT32/exFAT volume labelled DDSEED (a second USB
+# stick, or a second partition), prepared on Windows with
+# tools/windows/New-DailyDriverSeed.ps1. Layout, under daily-driver-seed/:
+#
+#   seed.json              {"version":1, "hostname":"...",
+#                           "localadmin":{"hashedPassword":"$y$... or $6$..."}}
+#   users/<name>.json      systemd-homed user record, with secret.password
+#   skel/localadmin/...    copied into localadmin's home
+#   skel/<name>/...        copied into <name>'s new encrypted home
+#
+# Secrets never touch this machine's disk: user records are staged in
+# /run/credstore (tmpfs) for daily-driver-users.service, and the seed
+# directory is deleted from the stick once imported.
+# See docs/decisions/0018-provisioning-seed-stick.md.
+set -euo pipefail
+
+ROOT="${SEED_ROOT:-}" # test seam: prefixes every path this script writes
+readonly LABEL=DDSEED
+readonly STATE="${ROOT}/var/lib/daily-driver"
+readonly CREDSTORE="${ROOT}/run/credstore"
+readonly SKEL_STAGE_PATH=/run/daily-driver/skel # as homed will see it
+readonly SKEL_STAGE="${ROOT}${SKEL_STAGE_PATH}"
+readonly NAME_RE='^[a-z_][a-z0-9_-]{0,31}$'
+
+log() { echo "daily-driver-seed: $*"; }
+die() {
+	echo "daily-driver-seed: ERROR: $*" >&2
+	exit 1
+}
+
+mountpoint=""
+# shellcheck disable=SC2329 # invoked by the EXIT trap
+cleanup() {
+	if [[ -n "${mountpoint}" ]]; then
+		sync
+		umount "${mountpoint}" 2>/dev/null || true
+		rmdir "${mountpoint}" 2>/dev/null || true
+	fi
+}
+trap cleanup EXIT
+
+finish() {
+	mkdir -p "${STATE}"
+	touch "${STATE}/seed-imported"
+	exit 0
+}
+
+# --- Find the seed ------------------------------------------------------------
+if [[ -n "${SEED_DIR:-}" ]]; then
+	seed="${SEED_DIR}"
+else
+	udevadm settle --timeout=10 || true
+	device="/dev/disk/by-label/${LABEL}"
+	for _ in 1 2 3 4 5; do
+		[[ -e "${device}" ]] && break
+		sleep 1
+	done
+	if [[ ! -e "${device}" ]]; then
+		log "no ${LABEL} volume; nothing to import"
+		finish
+	fi
+	mountpoint="$(mktemp -d /run/daily-driver-seed.XXXXXX)"
+	mount -o rw,nosuid,nodev,noexec "${device}" "${mountpoint}" ||
+		die "can't mount ${device}"
+	seed="${mountpoint}/daily-driver-seed"
+fi
+if [[ ! -d "${seed}" ]]; then
+	log "${LABEL} has no daily-driver-seed/ directory; nothing to import"
+	finish
+fi
+log "importing ${seed}"
+
+# --- Validate everything before changing anything -----------------------------
+config="${seed}/seed.json"
+hostname="" hash=""
+if [[ -f "${config}" ]]; then
+	jq -e '.version == 1' "${config}" >/dev/null || die "seed.json: missing or unsupported \"version\""
+	hostname="$(jq -r '.hostname // empty' "${config}")"
+	hash="$(jq -r '.localadmin.hashedPassword // empty' "${config}")"
+	if jq -e '.localadmin.sshAuthorizedKeys' "${config}" >/dev/null 2>&1; then
+		log "ignoring localadmin.sshAuthorizedKeys: localadmin is console-only (decision 0005)"
+	fi
+	if [[ -n "${hostname}" && ! "${hostname}" =~ ^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$ ]]; then
+		die "seed.json: invalid hostname '${hostname}'"
+	fi
+	if [[ -n "${hash}" && ! "${hash}" =~ ^\$(y|6)\$ ]]; then
+		die "seed.json: localadmin.hashedPassword must be a yescrypt (\$y\$) or SHA-512 (\$6\$) crypt hash"
+	fi
+fi
+
+users=()
+for record in "${seed}"/users/*.json; do
+	[[ -e "${record}" ]] || continue
+	name="$(basename "${record}" .json)"
+	[[ "${name}" =~ ${NAME_RE} ]] || die "users/${name}.json: invalid user name"
+	[[ "${name}" != localadmin ]] || die "users/localadmin.json: localadmin is not a homed user"
+	jq -e --arg n "${name}" '.userName == $n' "${record}" >/dev/null ||
+		die "users/${name}.json: userName must be \"${name}\""
+	jq -e '(.secret.password // []) | length > 0' "${record}" >/dev/null ||
+		die "users/${name}.json: secret.password is required (homed derives the encryption key from it)"
+	users+=("${name}")
+done
+
+# --- Apply -------------------------------------------------------------------
+if [[ -n "${hostname}" ]]; then
+	printf '%s\n' "${hostname}" >"${ROOT}/etc/hostname"
+	log "hostname: ${hostname}"
+fi
+
+if [[ -n "${hash}" ]]; then
+	usermod -p "${hash}" localadmin
+	log "localadmin: password set from seed"
+fi
+
+if [[ -d "${seed}/skel/localadmin" ]]; then
+	home="${ROOT}/var/home/localadmin"
+	mkdir -p "${home}"
+	cp -a "${seed}/skel/localadmin/." "${home}/"
+	chown -R localadmin:localadmin "${home}"
+	restorecon -RF "${home}" 2>/dev/null || true
+	log "localadmin: skel copied"
+fi
+
+if ((${#users[@]})); then
+	(umask 077 && mkdir -p "${CREDSTORE}" "${SKEL_STAGE}")
+	for name in "${users[@]}"; do
+		filter='.storage //= "luks"
+			| if has("passwordChangeNow") then . else .passwordChangeNow = true end'
+		if [[ -d "${seed}/skel/${name}" ]]; then
+			cp -a "${seed}/skel/${name}" "${SKEL_STAGE}/${name}"
+			filter+=" | .skeletonDirectory = \"${SKEL_STAGE_PATH}/${name}\""
+		fi
+		(umask 077 && jq "${filter}" "${seed}/users/${name}.json" >"${CREDSTORE}/home.create.${name}")
+		log "user ${name}: staged for daily-driver-users.service"
+	done
+fi
+
+# --- Consume the seed: its secrets must not outlive this boot ----------------
+rm -rf "${seed}"
+if [[ -n "${mountpoint}" ]]; then
+	printf 'Imported by %s on %s. Secrets were deleted from this stick.\n' \
+		"${hostname:-this machine}" "$(date -Is)" >"${mountpoint}/IMPORTED.txt"
+fi
+log "done; seed deleted from the stick"
+finish

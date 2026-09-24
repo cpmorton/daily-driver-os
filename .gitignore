@@ -2,3 +2,9 @@ cosign.key
 _build_*
 output
 _build-*/**
+
+# daily-driver-os: seed sticks hold initial passwords in plain text. Never commit
+# one, even by accident (decision 0018).
+daily-driver-seed/
+*.seed.json
+localadmin.hash

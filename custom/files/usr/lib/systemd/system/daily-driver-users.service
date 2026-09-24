@@ -1,0 +1,27 @@
+# First boot, step 3: create the daily users. Seeded users come from the
+# home.create.* credentials seed-import staged; with no seed, ask on tty1.
+# See docs/decisions/0018-provisioning-seed-stick.md.
+[Unit]
+Description=Create the first daily users (first boot, tty1)
+ConditionPathExists=!/var/lib/daily-driver/users-created
+Wants=systemd-homed.service
+After=systemd-homed.service daily-driver-seed.service localadmin-firstboot.service systemd-user-sessions.service
+Before=gdm.service display-manager.service getty@tty1.service
+Conflicts=getty@tty1.service
+
+[Service]
+Type=oneshot
+TimeoutStartSec=infinity
+ImportCredential=home.*
+ExecStartPre=-/usr/bin/plymouth quit
+ExecStartPre=-/usr/bin/chvt 1
+ExecStart=/usr/libexec/daily-driver/first-users
+StandardInput=tty
+StandardOutput=tty
+StandardError=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+
+[Install]
+WantedBy=multi-user.target

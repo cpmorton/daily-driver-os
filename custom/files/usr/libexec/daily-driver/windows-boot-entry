@@ -1,0 +1,66 @@
+#!/usr/bin/bash
+# Add Windows to the boot menu.
+#
+# bootc's static GRUB config (bootupd) never runs os-prober, so a dual-boot
+# machine shows only Linux, for one second. The static config sources
+# /boot/grub2/custom.cfg, so this writes a Windows chainload entry and a
+# 5-second menu there. It never overwrites an existing custom.cfg.
+#   windows-boot-entry            detect and write (the service runs this)
+#   windows-boot-entry --print U  print the config for ESP filesystem UUID U
+# See docs/decisions/0017-dual-boot-internal-disk.md.
+set -euo pipefail
+
+readonly CFG="${CUSTOM_CFG:-/boot/grub2/custom.cfg}"
+readonly ESP_TYPE=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+
+render() {
+	cat <<EOF
+# Written by windows-boot-entry (daily-driver-os). Edit freely; it is never
+# overwritten. Delete this file to have it regenerated at next boot.
+set timeout=5
+menuentry 'Windows Boot Manager' --class windows --class os {
+	insmod part_gpt
+	insmod fat
+	insmod chain
+	search --no-floppy --fs-uuid --set=root $1
+	chainloader /EFI/Microsoft/Boot/bootmgfw.efi
+}
+EOF
+}
+
+if [[ "${1:-}" == --print ]]; then
+	[[ "${2:-}" =~ ^[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}$ ]] || {
+		echo "usage: $0 --print XXXX-XXXX" >&2
+		exit 2
+	}
+	render "$2"
+	exit 0
+fi
+
+if [[ -e "${CFG}" ]]; then
+	echo "windows-boot-entry: ${CFG} exists; leaving it alone"
+	exit 0
+fi
+
+uuid=""
+probe="$(mktemp -d)"
+trap 'umount "${probe}" 2>/dev/null || true; rmdir "${probe}"' EXIT
+while read -r dev type; do
+	[[ "${type,,}" == "${ESP_TYPE}" ]] || continue
+	mount -o ro "${dev}" "${probe}" 2>/dev/null || continue
+	if [[ -f "${probe}/EFI/Microsoft/Boot/bootmgfw.efi" ]]; then
+		uuid="$(blkid -s UUID -o value "${dev}")"
+	fi
+	umount "${probe}"
+	[[ -n "${uuid}" ]] && break
+done < <(lsblk -rno PATH,PARTTYPE)
+
+if [[ -z "${uuid}" ]]; then
+	echo "windows-boot-entry: no Windows boot manager found"
+	exit 0
+fi
+
+# /boot may be mounted read-only; write it from a private mount namespace.
+render "${uuid}" | unshare -m sh -c \
+	"mount -o remount,rw /boot && cat > '${CFG}.tmp' && mv '${CFG}.tmp' '${CFG}'"
+echo "windows-boot-entry: added Windows (ESP ${uuid}) to ${CFG}"

@@ -1,0 +1,17 @@
+# Add Windows to the GRUB menu on dual-boot machines; bootc's static GRUB
+# config never looks for other operating systems.
+# See docs/decisions/0017-dual-boot-internal-disk.md.
+[Unit]
+Description=Add Windows to the boot menu
+ConditionPathExists=!/boot/grub2/custom.cfg
+ConditionPathExists=!/var/lib/daily-driver/windows-entry-checked
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/daily-driver/windows-boot-entry
+ExecStartPost=/usr/bin/mkdir -p /var/lib/daily-driver
+ExecStartPost=/usr/bin/touch /var/lib/daily-driver/windows-entry-checked
+
+[Install]
+WantedBy=multi-user.target

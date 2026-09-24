@@ -3,6 +3,10 @@
 - **Status:** Accepted
 - **Date:** 2026-09-23
 
+## Amendments
+
+- 2026-09-23, [0018](0018-provisioning-seed-stick.md): localadmin is now UID 1000, so it owns the Homebrew prefix and timers by default. `ujust brew-owner <user>` still hands them to a daily user.
+
 ## Context
 
 finpilot bakes in `ublue-os/brew`: a Homebrew tarball unpacked to

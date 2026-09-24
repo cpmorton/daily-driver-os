@@ -2,9 +2,10 @@
 
 # daily-driver-os
 
-A public bootc image for one person's workstation, built on the finpilot
-template. Read `docs/README.md` first, then `docs/ARCHITECTURE.md`: most wrong
-changes put something in the wrong layer. `docs/decisions/` says why things are
+A public bootc image for a small fleet of dual-boot workstations with one
+administrator, built on the finpilot template. Read `docs/README.md` first,
+then `docs/ARCHITECTURE.md`: most wrong changes put something in the wrong
+layer. `docs/decisions/` says why things are
 the way they are; check there before "fixing" something deliberate.
 
 ## Invariants
@@ -23,6 +24,8 @@ the way they are; check there before "fixing" something deliberate.
 - **`/opt`, `/usr/local` and `/root` are real directories.** Never reintroduce
   upstream's `/opt -> /var/opt` symlink. Nothing may write into `/root` during
   the build.
+- **Seeds are secrets.** Never commit a `daily-driver-seed/` folder or a
+  localadmin hash, even a test one that looks real.
 - **Access model.** Root stays locked. localadmin stays local-only (pam_access +
   sshd). Rootful podman stays masked. Changing any of these needs the user's
   explicit say-so.

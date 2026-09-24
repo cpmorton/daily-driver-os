@@ -1,0 +1,26 @@
+#!/usr/bin/bash
+# Give each systemd-homed user subordinate UID/GID ranges for rootless podman.
+# homed users never pass through useradd, which is what normally allocates
+# them. Usage: ensure-subids [user...]; with no arguments, every homed user.
+set -euo pipefail
+
+SUBUID_FILE="${SUBUID_FILE:-/etc/subuid}"
+SUBGID_FILE="${SUBGID_FILE:-/etc/subgid}"
+readonly RANGE=65536 FLOOR=100000
+
+users=("$@")
+if ((${#users[@]} == 0)); then
+	mapfile -t users < <(homectl list --no-legend 2>/dev/null | awk '{print $1}')
+fi
+
+for user in "${users[@]}"; do
+	[[ -n "${user}" ]] || continue
+	for file in "${SUBUID_FILE}" "${SUBGID_FILE}"; do
+		touch "${file}"
+		grep -q "^${user}:" "${file}" && continue
+		# Next block above the highest range already allocated.
+		start="$(awk -F: -v floor="${FLOOR}" 'BEGIN {m = floor} {e = $2 + $3; if (e > m) m = e} END {print m}' "${file}")"
+		printf '%s:%s:%s\n' "${user}" "${start}" "${RANGE}" >>"${file}"
+		echo "ensure-subids: ${user} -> ${file##*/} ${start}:${RANGE}"
+	done
+done

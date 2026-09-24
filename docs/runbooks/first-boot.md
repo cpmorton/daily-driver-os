@@ -1,51 +1,45 @@
 # First boot
 
-From a fresh install (see `reinstall.md`) to a working daily user.
+What happens before the login screen, in order, and what to do at each step.
 
-## 1. Set localadmin's password (tty1, before GDM)
+## With a seed stick
 
-The console asks for it before the login screen appears. A mistyped
-confirmation or a password pwquality rejects just asks again.
+Nothing to do. The machine imports the seed, sets the hostname and
+localadmin's password, creates each seeded user's encrypted home, deletes the
+seed from the stick, and shows the login screen. Each seeded user signs in
+with the initial password and must choose a new one (unless the seed said
+otherwise).
 
-## 2. Log in as localadmin and give /var/home its own partition
+## Without a seed (or a partial one)
 
-Daily users' encrypted home images belong on the internal disk, not on the OS
-stick. The recipe copies the current `/var/home` across and adds an fstab entry;
-it never formats anything.
+The console asks, on screen, before the login screen:
 
-```bash
-lsblk -f                                   # find the empty partition; the internal disk also holds Windows
-sudo mkfs.btrfs -L home /dev/nvme0n1pN     # only if it has no filesystem yet; triple-check N
-ujust home-partition /dev/nvme0n1pN
-sudo systemctl reboot
-findmnt /var/home                          # after the reboot: must show the partition
-```
+1. **localadmin's password** (only if the seed didn't provide one). The
+   administrator types it, not the machine's user. Save it in the password
+   manager, then save its hash too: `ujust localadmin-hash` after first boot.
+2. **The first user** (only if the seed had no users): username, full name,
+   home size, then the password twice. That password encrypts the home;
+   localadmin can't open it. Answer `y` to add another user.
 
-## 3. Create the daily user
-
-```bash
-ujust homed-user <name> 200G               # asks for the new user's password
-ujust brew-owner <name>                    # Homebrew has one owner; make it this user
-```
-
-## 4. Back up systemd-homed's signing keys, off this stick
-
-Every homed home is signed by this machine's key pair. Lose it, for example to
-a reinstall, and existing homes come back as unsigned by this host.
+## After first boot (localadmin)
 
 ```bash
-sudo tar -C /var/lib/systemd/home -czf /tmp/homed-keys.tgz local.public local.private
-# Move it somewhere safe that isn't the OS stick (password manager attachment,
-# encrypted USB). It is a private key: never into a repository.
+ujust homed-user <name> 100G      # more users later; each gets its own encrypted home
+ujust brew-owner <name>           # optional: let a daily user run brew install
 ```
 
-## 5. Sign in as the daily user
+## After first boot (each user)
 
 ```bash
-ujust dotfiles <github-user>               # chezmoi; runs gh auth login on first apply
-claude                                     # Claude Code: browser sign-in with your claude.ai account
+ujust dotfiles <github-user>      # git identity and GitHub sign-in (the dotfiles repository)
+claude                            # Claude Code: sign in with your claude.ai account
 ```
 
-Sign in to claude.ai in Chrome for chat, connectors and cloud sessions.
-Flatpaks install in the background after the first login; check with
+Flatpaks (Signal, Discord, LibreOffice, Obsidian, GIMP, Podman Desktop)
+install in the background after the first login:
 `systemctl status flatpak-preinstall.service`.
+
+## If Windows is missing from the boot menu
+
+`ujust windows-entry` (as localadmin) re-detects it. The one-time boot menu
+(F12) always works too.

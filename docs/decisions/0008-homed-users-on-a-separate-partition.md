@@ -1,6 +1,6 @@
 # 0008. Daily users are systemd-homed LUKS homes on a separate partition
 
-- **Status:** Accepted
+- **Status:** Superseded by [0017](0017-dual-boot-internal-disk.md). homed LUKS homes stay; the separate partition and the OS-on-USB layout are gone.
 - **Date:** 2026-09-23
 
 ## Context

@@ -9,7 +9,7 @@ inventory is [PROVENANCE.md](PROVENANCE.md); the reasons are in
 | --- | --- | --- | --- |
 | OS, packages, policy | `/usr`, plus `/etc` files never edited locally | Replaced atomically | This repository |
 | Machine state | Locally edited `/etc`, all of `/var` | Persists, and drifts | Keep it small; `ujust etc-drift` |
-| User state | systemd-homed LUKS homes on the internal partition | Untouched | The `dotfiles` repository (chezmoi): identity and sign-ins only |
+| User state | systemd-homed LUKS homes, one encrypted file per user in `/var/home` | Untouched (a reinstall wipes them) | The `dotfiles` repository (chezmoi): identity and sign-ins only |
 | Secrets | GNOME Keyring; password manager to be decided | Untouched | Never in any repository |
 | Integrations | claude.ai connectors, GitHub and Google accounts | Account-side | Nothing to image |
 
@@ -52,7 +52,7 @@ has no system-wide form, or can't be redistributed.
 | `00-image-info.sh` | upstream | os-release and image-info.json |
 | `10-overlay.sh` | upstream | common + brew overlays, `custom/files`, seams, units |
 | `20-packages-and-services.sh` | upstream | just, gum, fzf, jq, uupd |
-| `70-daily-driver.sh` | this image | real `/opt`, Chrome, VS Code, gh, chezmoi, homed, accounts, PAM, rootless podman |
+| `70-daily-driver.sh` | this image | real `/opt`, Chrome, VS Code, gh, chezmoi, homed, accounts, PAM, rootless podman, first-boot seed and user setup, Windows boot entry |
 | `75-claude.sh` | this image | Claude Code CLI, fingerprint-checked |
 | `90-cleanup.sh` | upstream | repositories off, `/var` pruned, lint prep |
 
@@ -66,8 +66,8 @@ makes pulling template changes a merge rather than a rewrite.
 | Account | Login | Admin |
 | --- | --- | --- |
 | root | none: password locked; emergency shell only via the GRUB command line | n/a |
-| localadmin | console, GDM, su, sudo, polkit; never remote | `wheel` |
-| homed users | anywhere PAM allows | no; polkit asks for localadmin |
+| localadmin (UID 1000, the administrator's) | console, GDM, su, sudo, polkit; never remote | `wheel` |
+| homed users (60001+, each home its own LUKS file) | anywhere PAM allows | no; polkit asks for localadmin |
 
 `/etc/security/access.d/50-localadmin.conf` refuses localadmin wherever
 `PAM_RHOST` is set. sudo leaves `PAM_RHOST` unset on Linux (its `pam_rhost`

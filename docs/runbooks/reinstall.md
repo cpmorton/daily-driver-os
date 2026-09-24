@@ -1,115 +1,82 @@
-# Install or reinstall (from Windows)
+# Install or reinstall (dual boot, from Windows)
 
-No Linux needed. You need a Windows PC, two USB devices, and about an hour.
+Linux goes into free space on the laptop's internal disk, beside Windows. No
+Linux needed anywhere; everything is prepared on Windows.
+[Decision 0017](../decisions/0017-dual-boot-internal-disk.md).
 
-| Device | Role | Size |
-| --- | --- | --- |
-| **Installer stick** | Temporary: boots the installer. Erased. | 8 GB or more |
-| **OS drive** | Where the OS lives from now on. Erased. | 64 GB or more; an external SSD is much faster than a stick |
+| You need | For |
+| --- | --- |
+| **Installer stick**, 8 GB+ | The generic installer ISO. Erased when written; reusable for every machine. |
+| **Seed stick** (optional), any size | This machine's hostname, localadmin password hash, and users. [seed-stick.md](seed-stick.md). |
+| 100 GB+ of free disk space | Linux plus the encrypted homes. |
 
-**The laptop's internal disk holds Windows. Nothing in these steps touches
-it, as long as you pick the right disk in step 6.**
-
-## 0. Before you start
-
-- **BitLocker recovery key.** Booting from USB can make Windows ask for it
-  next time. Get it now from <https://aka.ms/myrecoverykey> (or
-  `manage-bde -protectors -get C:` in an admin terminal) and keep it off
-  the laptop.
-- **Reinstalling?** Make sure the homed key backup from `first-boot.md`
-  step 4 exists. Without it, existing homes won't unlock.
-
-## 1. Get the ISO
-
-Someone with access to the repository runs **Actions → Build installer ISO →
-Run workflow** (tag: `stable`), or `gh workflow run build-iso.yml -f tag=stable`.
-It takes 20–40 minutes. Then download the artifact from the run page, or:
+## 1. Prepare Windows (admin PowerShell, once per machine)
 
 ```powershell
-gh run download --repo OWNER/daily-driver-os --name daily-driver-os-stable-iso
+manage-bde -status C:          # if "Protection On": save the recovery key first (aka.ms/myrecoverykey)
+powercfg /h off                # Fast Startup and hibernation off: Linux can safely share the disk
+# Windows keeps the hardware clock in local time, Linux in UTC; make Windows use UTC:
+reg add "HKLM\System\CurrentControlSet\Control\TimeZoneInformation" /v RealTimeIsUniversal /t REG_DWORD /d 1 /f
+diskmgmt.msc                   # right-click C: > Shrink Volume; leave the space Unallocated
 ```
 
-Artifacts expire after 14 days; re-run the workflow for a fresh one.
+Shrink by at least 100 GB. Don't create a partition in the freed space: the
+installer uses unallocated space.
 
-## 2. Check it
+## 2. Get and check the installer
+
+Download the ISO artifact from the latest **Build installer ISO** run
+(Actions tab of the repository; re-run the workflow if it has expired), unzip
+it, and check it:
 
 ```powershell
 (Get-FileHash .\daily-driver-os-stable.iso -Algorithm SHA256).Hash.ToLower()
-Get-Content .\daily-driver-os-stable.iso.sha256
+Get-Content .\daily-driver-os-stable.iso.sha256     # must match
 ```
-
-The two hashes must match.
 
 ## 3. Write the installer stick
 
-Use **Fedora Media Writer** (`winget install Fedora.FedoraMediaWriter`):
-choose *Select .iso file*, pick the ISO, pick the installer stick, write.
+Fedora Media Writer (*Select .iso file*), or Rufus (portable, no install) in
+**DD image mode**. One installer stick serves every machine until the next
+image release.
 
-Rufus also works: when it asks, choose **DD image mode** (not ISO mode).
+## 4. Install
 
-## 4. Boot the installer
+1. Plug in the installer stick only. Restart, and open the **one-time boot
+   menu** (usually F12; HP F9; ASUS F8 or Esc). Pick the stick. Secure Boot
+   stays on.
+2. **Installation Destination:** select the internal disk. Keep
+   **Automatic** storage configuration. The installer uses the free space; if
+   it offers to *reclaim* or *delete* space, cancel and shrink Windows more
+   instead.
+3. **Create no user.** The image creates localadmin (UID 1000) itself, and a
+   user made here would take that UID. Root is already locked.
+4. Begin installation. When it finishes, remove the installer stick.
 
-1. Plug in **both** USB devices. Shut Windows down fully: hold **Shift**
-   while clicking *Shut down*, so Fast Startup doesn't leave the disk half
-   hibernated.
-2. Power on and open the **one-time boot menu** (usually F12; Dell and Lenovo
-   F12, HP F9, ASUS F8 or Esc). Pick the installer stick, in UEFI mode.
-   Don't change the permanent boot order: that's what tends to trigger
-   BitLocker recovery.
-3. Secure Boot can stay on: the image uses Fedora's signed kernel and boot
-   chain.
+## 5. First boot
 
-## 5. Install
+1. If you made a seed stick, plug it in now.
+2. Boot. The menu lists this OS first and **Windows Boot Manager** second
+   (the Windows entry appears from the second boot on).
+3. Before the login screen, the console either imports the seed silently, or
+   asks for localadmin's password and then the first user(s). Details:
+   [first-boot.md](first-boot.md).
+4. Remove the seed stick; it no longer holds any secrets.
 
-1. Language and keyboard as usual.
-2. **Installation destination: select only the OS drive.** Check the size and
-   model. Leave the laptop's internal disk and the installer stick unselected.
-   Choose automatic partitioning and let it erase the OS drive.
-3. **Create no user.** The image creates `localadmin` itself; an
-   installer-made user would be an unrestricted administrator. Root is
-   already locked.
-4. Install, then reboot and remove the installer stick.
+## Reinstall
 
-## 6. First boot
-
-Use the boot menu again and pick the OS drive, then follow
-[first-boot.md](first-boot.md): the console asks for localadmin's password
-before the login screen appears.
-
-After installing, the firmware may list the new OS first. If the laptop should
-still start Windows by default, move Windows back to the top in the firmware
-boot order, or in Windows run `bcdedit /enum firmware` to check.
-
-## Reinstall: after step 5
-
-The home partition already holds the homes, so mount it as it is instead of
-running `ujust home-partition`:
-
-1. Set localadmin's password on tty1 (`first-boot.md` step 1), then:
-   ```bash
-   lsblk -f                         # note the home partition's UUID and FSTYPE
-   echo "UUID=<uuid> /var/home <fstype> defaults,nofail,x-systemd.device-timeout=10s 0 0" | sudo tee -a /etc/fstab
-   sudo systemctl reboot
-   ```
-2. Restore the homed keys, then restart homed:
-   ```bash
-   sudo install -m 0644 local.public  /var/lib/systemd/home/local.public
-   sudo install -m 0600 local.private /var/lib/systemd/home/local.private
-   sudo systemctl restart systemd-homed
-   homectl list                     # existing homes should be listed
-   ```
-3. Re-run `ujust homed-user <name>` (it skips creating an existing home and
-   restores the subordinate IDs rootless podman needs) and
-   `ujust brew-owner <name>`; both wrote to the old `/etc`.
+Reinstalling wipes the Linux side, encrypted homes included. Before: copy each
+`/var/home/<user>.home` file somewhere safe (it's one file per user, still
+encrypted). After: copy it back to `/var/home/` and run `sudo homectl list`;
+if the home is listed as unsigned by this machine, see
+[recover.md](recover.md#an-encrypted-home-from-another-install).
 
 ## Alternative: switch an existing Fedora Atomic install
-
-A machine already running Silverblue or Bluefin can switch without an ISO:
 
 ```bash
 sudo bootc switch ghcr.io/OWNER/daily-driver-os:stable
 sudo systemctl reboot
 ```
 
-Any user the old installer created stays in `wheel`: once localadmin works,
-remove it (`sudo userdel -r <old-user>`).
+Any user the old installer created stays in `wheel`, and on UID 1000 it keeps
+localadmin from getting that UID. Prefer a fresh install.

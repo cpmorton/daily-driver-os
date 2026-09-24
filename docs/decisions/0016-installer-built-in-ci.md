@@ -3,6 +3,10 @@
 - **Status:** Accepted
 - **Date:** 2026-09-23
 
+## Amendments
+
+- 2026-09-23, [0017](0017-dual-boot-internal-disk.md): installs go to free space on the internal disk; the installer stick is the only boot media.
+
 ## Context
 
 The people installing this image have Windows machines and no Linux.

@@ -146,12 +146,27 @@ upstream source on 2026-09-23; the ecosystem moves fast, so the
 ## Accounts and security
 
 **localadmin**
-: This image's break-glass administrator: UID 1999, in `wheel`, allowed on the
+: The administrator's account on every machine: UID 1000, in `wheel`, allowed on the
   console, GDM, su, sudo and polkit only. [decision 0005](decisions/0005-accounts-and-access.md)
 
 **systemd-homed, `homectl`**
 : Manages self-contained, LUKS-encrypted user homes. Daily users are homed
   users. [decision 0008](decisions/0008-homed-users-on-a-separate-partition.md)
+
+**Seed stick, `DDSEED`**
+: A FAT32/exFAT volume carrying one machine's hostname, localadmin hash and
+  users, imported once at first boot and then deleted.
+  [decision 0018](decisions/0018-provisioning-seed-stick.md)
+
+**systemd credentials, `/run/credstore`**
+: systemd's way to hand secrets to one service without environment variables
+  or disk files. The seed importer stages `home.create.<user>` credentials in
+  RAM for homed.
+
+**bootupd, static GRUB config**
+: bootc's bootloader updater. Its GRUB menu is a fixed file that never scans
+  for other systems, hence `windows-boot-entry`.
+  [decision 0017](decisions/0017-dual-boot-internal-disk.md)
 
 **sysusers.d, tmpfiles.d, environment.d**
 : systemd's declarative ways to create accounts, create or link paths, and set

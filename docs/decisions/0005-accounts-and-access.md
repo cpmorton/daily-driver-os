@@ -3,6 +3,10 @@
 - **Status:** Accepted
 - **Date:** 2026-09-23
 
+## Amendments
+
+- 2026-09-23, [0018](0018-provisioning-seed-stick.md): localadmin is UID 1000, not 1999, and its password comes from the seed stick's hash when one is present (tty1 prompt otherwise). The access rules below are unchanged.
+
 ## Context
 
 One break-glass administrator, never reachable remotely; no root logins; daily

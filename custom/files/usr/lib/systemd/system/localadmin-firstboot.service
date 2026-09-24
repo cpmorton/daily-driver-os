@@ -1,14 +1,18 @@
+# First boot, step 2: only when no seed stick set localadmin's password, ask
+# for it on tty1. The person installing (not the machine's user) types it.
 # [VERIFY in VM] console-prompt choreography with plymouth + GDM
 [Unit]
 Description=Set localadmin password (first boot, tty1)
 ConditionPathExists=!/var/lib/localadmin-firstboot/done
-After=systemd-sysusers.service systemd-user-sessions.service
+After=systemd-sysusers.service systemd-user-sessions.service daily-driver-seed.service
 Before=gdm.service display-manager.service getty@tty1.service
 Conflicts=getty@tty1.service
 
 [Service]
 Type=oneshot
 TimeoutStartSec=infinity
+# Skip cleanly when the seed stick already set a password.
+ExecCondition=/usr/libexec/daily-driver/localadmin-needs-password
 StateDirectory=localadmin-firstboot
 # Plymouth owns the console until told to leave
 ExecStartPre=-/usr/bin/plymouth quit

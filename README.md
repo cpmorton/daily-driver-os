@@ -40,12 +40,14 @@ alongside upstream's `default.preinstall`.
 ### Accounts and access
 
 - **root**: password locked, in the image and in the installer kickstart.
-- **localadmin** (UID 1999, `wheel`): the break-glass administrator. Created by
-  `sysusers.d`; its password is typed on tty1 at first boot, so no hash is ever
-  in this public repository. Console, GDM, su, sudo and polkit only:
+- **localadmin** (UID 1000, `wheel`): the administrator's account on every
+  machine, not the user's. Created by `sysusers.d`; its password comes from a
+  seed stick's hash or is typed on tty1 at first boot, never from this public
+  repository. Console, GDM, su, sudo and polkit only:
   `pam_access` refuses it anywhere `PAM_RHOST` is set, and sshd denies it.
-- **Daily users**: systemd-homed, LUKS-encrypted, on a separate internal
-  partition mounted at `/var/home`. Not in `wheel`.
+- **Daily users**: systemd-homed, each home its own LUKS-encrypted file that
+  localadmin can't open. Created at first boot from the seed stick, or asked
+  on screen. Not in `wheel`.
 
 ### Removed or disabled
 
@@ -70,8 +72,9 @@ alongside upstream's `default.preinstall`.
 
 | Step | Where | Runbook |
 | --- | --- | --- |
-| Install onto the USB stick | installer ISO | [docs/runbooks/reinstall.md](docs/runbooks/reinstall.md) |
-| First boot: localadmin, home partition, daily user | console | [docs/runbooks/first-boot.md](docs/runbooks/first-boot.md) |
+| Prepare a machine's seed (optional) | Windows | [docs/runbooks/seed-stick.md](docs/runbooks/seed-stick.md) |
+| Install beside Windows | installer stick | [docs/runbooks/reinstall.md](docs/runbooks/reinstall.md) |
+| First boot: localadmin, daily users | console | [docs/runbooks/first-boot.md](docs/runbooks/first-boot.md) |
 | Update or roll back | any time | [docs/runbooks/upgrade.md](docs/runbooks/upgrade.md) |
 | Something broke | | [docs/runbooks/recover.md](docs/runbooks/recover.md) |
 
