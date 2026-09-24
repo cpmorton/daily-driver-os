@@ -11,7 +11,8 @@ set -xeuo pipefail
 # packages and flips switches.
 #
 #   1. /opt, /usr/local, /root become real, image-owned directories
-#   2. Chrome, VS Code, podman-compose, gh, chezmoi, systemd-homed
+#   2. Chrome, VS Code, gh, chezmoi, systemd-homed, and the Docker-compatible
+#      front end to rootless podman (podman-docker, podman-compose)
 #   3. root locked; localadmin gets its password on tty1 at first boot
 #   4. PAM: homed + pam_access (localadmin: local logins only)
 #   5. rootful podman off, rootless per-user socket on
@@ -73,13 +74,23 @@ echo "::group:: Packages"
 # every account on the first login.
 # /usr/bin/homectl is a file provide, so dnf picks whichever subpackage ships
 # systemd-homed on this release instead of this script hardcoding the split.
+# podman-docker: /usr/bin/docker runs podman, so tools that hardcode `docker`
+# (VS Code Dev Containers by default) use rootless podman with no per-user
+# settings. See docs/decisions/0006-rootless-podman-only.md.
 dnf5 install -y \
 	google-chrome-stable \
 	code \
+	podman-docker \
 	podman-compose \
 	gh \
 	chezmoi \
 	/usr/bin/homectl
+
+# docker-compose -> podman-compose: the Dev Containers extension's default
+# compose command. It lives in /usr/local/bin because /usr/local only became a
+# real, image-owned directory at the top of this phase; custom/files runs
+# earlier and can't place files there.
+ln -sfn /usr/bin/podman-compose /usr/local/bin/docker-compose
 
 echo "::endgroup::"
 
@@ -140,6 +151,30 @@ systemctl mask gnome-remote-desktop.service
 
 echo "::endgroup::"
 
+echo "::group:: Provenance manifest"
+
+# Which overlay put each non-RPM file in the image, for `ujust provenance`.
+# Same order as 10-overlay.sh, so a later source wins: common/shared, then
+# ublue-os/brew, then this repository's custom/files. RPM-owned files are
+# answered at runtime by `rpm -qf` instead.
+readonly MANIFEST=/usr/share/daily-driver-os/provenance.tsv
+mkdir -p "$(dirname "${MANIFEST}")"
+{
+	for source in \
+		"projectbluefin/common shared/=/ctx/oci/common/shared" \
+		"ublue-os/brew=/ctx/oci/brew" \
+		"this repository, custom/files/=/ctx/custom/files"; do
+		label="${source%%=*}"
+		root="${source#*=}"
+		(cd "${root}" && find . -mindepth 1 ! -type d ! -path ./README.md -printf '/%P\n') |
+			sed "s|\$|\t${label}|"
+	done
+	printf '%s\t%s\n' /usr/local/bin/docker-compose "this repository, build/70-daily-driver.sh"
+} | awk -F'\t' '{ last[$1] = $2 } END { for (p in last) print p "\t" last[p] }' |
+	LC_ALL=C sort >"${MANIFEST}"
+
+echo "::endgroup::"
+
 echo "::group:: Finalise repositories"
 
 # Upstream convention: disable every repository this phase enabled. The image
@@ -159,6 +194,18 @@ test -d /opt/google/chrome
 for bin in code gh chezmoi homectl podman-compose; do
 	command -v "${bin}"
 done
+# Docker front end: the shim runs podman, compose resolves, the environment
+# points at the per-user socket, and nothing points at a rootful one.
+grep -q 'exec /usr/bin/podman' /usr/bin/docker
+[[ "$(readlink -f /usr/local/bin/docker-compose)" == /usr/bin/podman-compose ]]
+# shellcheck disable=SC2016 # matching the literal ${XDG_RUNTIME_DIR} in the file
+grep -qF 'DOCKER_HOST=unix://${XDG_RUNTIME_DIR}/podman/podman.sock' \
+	/usr/lib/environment.d/60-docker-host.conf
+[[ "$(readlink /etc/tmpfiles.d/podman-docker.conf)" == /dev/null ]]
+git config --system --get init.defaultBranch
+# Provenance manifest: covers this repository's files and upstream's overlays.
+grep -qP '^/etc/gitconfig\tthis repository' "${MANIFEST}"
+grep -qP '^/usr/lib/systemd/system/brew-setup.service\tublue-os/brew$' "${MANIFEST}"
 test -x /usr/sbin/mkhomedir_helper
 
 # PAM wiring, on both stacks: system-auth (console, GDM, sudo) and

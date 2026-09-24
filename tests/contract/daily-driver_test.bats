@@ -91,3 +91,12 @@ line_of() {
 		grep -hoE '^[a-z][a-z0-9_-]*' {} + | sort | uniq -d)"
 	[ -z "${dupes}" ]
 }
+
+@test "custom/files: nothing targets /opt, /usr/local or /root" {
+	# 10-overlay.sh copies custom/files while these are still symlinks into
+	# /var; 70-daily-driver.sh then replaces them with empty directories and
+	# 90-cleanup.sh prunes /var, so such files would silently vanish.
+	[ ! -e "${FILES}/opt" ]
+	[ ! -e "${FILES}/usr/local" ]
+	[ ! -e "${FILES}/root" ]
+}

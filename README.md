@@ -9,8 +9,12 @@ image digests; the image owns everything under `/usr`.
 What the image does **not** own: user state (the
 [`dotfiles`](https://github.com/OWNER/dotfiles) repository, applied with
 chezmoi), secrets (never in any repository), and account-side integrations
-(claude.ai connectors, GitHub, Google). [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
-draws the line.
+(claude.ai connectors, GitHub, Google).
+
+**New here? Start with [docs/README.md](docs/README.md)**: glossary,
+architecture, decision records, and a provenance inventory of everything on
+the machine. On a running machine, `ujust provenance <path>` says where any
+file came from.
 
 ## What makes this raptor different
 
@@ -24,7 +28,9 @@ Based on `quay.io/fedora-ostree-desktops/silverblue:44` plus
   extension installs on each user's first login.
 - **Claude Code CLI**, from Anthropic's signed dnf repository (stable channel),
   with machine-wide guardrails in `/etc/claude-code/managed-settings.json`
-- **gh**, **chezmoi**, **podman-compose**, **systemd-homed**, from Fedora
+- **gh**, **chezmoi**, **systemd-homed**, from Fedora
+- **podman-docker** and **podman-compose**: `docker` and `docker-compose` run
+  rootless podman, so devcontainers work for every account with no settings
 
 ### Added applications (first boot, Flatpak)
 
@@ -55,7 +61,9 @@ alongside upstream's `default.preinstall`.
 - Journal is volatile (`Storage=volatile`): nothing persists across boots,
   including the logs of a boot you rolled back from.
 - `/tmp` is tmpfs (asserted at build time).
-- VS Code uses rootless podman for devcontainers (set per user by the dotfiles).
+- `DOCKER_HOST` points every app at the user's rootless podman socket.
+- Git defaults and GitHub credentials through gh are system-wide
+  (`/etc/gitconfig`); the dotfiles only add your name and email.
 - The image rebuilds nightly, so baked-in RPMs pick up upstream releases.
 
 ## Set up a machine

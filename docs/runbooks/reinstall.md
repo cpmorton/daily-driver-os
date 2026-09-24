@@ -52,4 +52,6 @@ localadmin works, remove it (`sudo userdel -r <old-user>`).
    sudo systemctl restart systemd-homed
    homectl list                     # existing homes should be listed
    ```
-3. Re-run `ujust brew-owner <name>`, since its drop-ins lived in the old `/etc`.
+3. Re-run `ujust homed-user <name>` (it skips creating an existing home and
+   restores the subordinate IDs rootless podman needs) and
+   `ujust brew-owner <name>`; both wrote to the old `/etc`.

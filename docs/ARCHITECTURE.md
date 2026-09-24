@@ -1,15 +1,33 @@
 # Architecture
 
 The image owns the machine. Everything else has a different owner, and a
-different lifecycle.
+different lifecycle. Terms are defined in [GLOSSARY.md](GLOSSARY.md); the
+inventory is [PROVENANCE.md](PROVENANCE.md); the reasons are in
+[decisions/](decisions/README.md).
 
 | Layer | Lives in | Survives an image swap? | Owner |
 | --- | --- | --- | --- |
 | OS, packages, policy | `/usr`, plus `/etc` files never edited locally | Replaced atomically | This repository |
 | Machine state | Locally edited `/etc`, all of `/var` | Persists, and drifts | Keep it small; `ujust etc-drift` |
-| User state | systemd-homed LUKS homes on the internal partition | Untouched | The `dotfiles` repository (chezmoi) |
+| User state | systemd-homed LUKS homes on the internal partition | Untouched | The `dotfiles` repository (chezmoi): identity and sign-ins only |
 | Secrets | GNOME Keyring; password manager to be decided | Untouched | Never in any repository |
 | Integrations | claude.ai connectors, GitHub and Google accounts | Account-side | Nothing to image |
+
+## Where software goes
+
+Summary of [decision 0004](decisions/0004-where-software-goes.md):
+
+| It is… | It goes in |
+| --- | --- |
+| The OS, apps you always want, system policy, defaults for every account | The image |
+| A GUI app from Flathub | `custom/flatpaks/daily.preinstall` |
+| A CLI tool you're trying out | Homebrew; promote it to the image once it's permanent |
+| A project's toolchain, runtimes, linters and VS Code extensions | That repository's `.devcontainer/` |
+| Identity, secrets, and preferences you change daily | The home, through the dotfiles |
+
+Moving something from the home into the image is the default. It stays in the
+home only if it's personal or secret, changes faster than an image build,
+has no system-wide form, or can't be redistributed.
 
 ## Rules
 
@@ -58,14 +76,7 @@ sudoers ever turns it on.
 
 ## Claude
 
-- **Claude Code CLI**: baked in from the stable channel, so it updates with the
-  image. The nightly rebuild keeps it current.
-- **Guardrails**: `/etc/claude-code/managed-settings.json` denies reads of SSH,
-  GPG, keyring and gh credentials on every account. Deny rules only ever add up
-  across settings files, so users can't loosen them. Treat it as a speed bump,
-  not a sandbox: a Bash command can still read those files.
-- **Desktop app**: Debian/Ubuntu-only today. Chat, connectors (Gmail, Calendar,
-  Drive, ...) and cloud sessions run on claude.ai, and connectors belong to the
-  Anthropic account, not the machine.
-- **This repository**: `CLAUDE.md` plus `.claude/skills` (upstream's agent
-  skills) give Claude Code working here the same procedures and rules.
+Claude Code CLI in the image, machine-wide guardrails in
+`/etc/claude-code/managed-settings.json`, everything else account-side on
+claude.ai. The desktop app doesn't support Fedora yet. Details:
+[decision 0012](decisions/0012-claude.md).

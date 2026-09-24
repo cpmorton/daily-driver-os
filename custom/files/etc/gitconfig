@@ -1,0 +1,16 @@
+# System-wide git defaults: the same for every account, owned by the image.
+# Personal identity (user.name, user.email) lives in each user's ~/.gitconfig,
+# written by the dotfiles repository. Editing this file locally stops the image
+# from updating it (see docs/ARCHITECTURE.md, "Prefer /usr").
+[init]
+	defaultBranch = main
+[pull]
+	rebase = true
+# gh keeps the GitHub token in the desktop keyring; git asks gh for it.
+# These are the lines `gh auth setup-git` would write per user.
+[credential "https://github.com"]
+	helper =
+	helper = !/usr/bin/gh auth git-credential
+[credential "https://gist.github.com"]
+	helper =
+	helper = !/usr/bin/gh auth git-credential

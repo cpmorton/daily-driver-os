@@ -57,8 +57,14 @@ homed-user user size="100G":
         echo "or set ALLOW_HOME_ON_ROOT=1 to put the home image on the OS disk." >&2
         exit 1
     fi
-    # Explicit size, so several homed users don't race for one partition.
-    sudo homectl create "{{ user }}" --storage=luks --disk-size="{{ size }}"
+    # Idempotent: after a reinstall the home already exists on the partition,
+    # but /etc/subuid and /etc/subgid are new and need its entries again.
+    if homectl inspect "{{ user }}" >/dev/null 2>&1; then
+        echo "{{ user }} already exists; checking its subordinate IDs only."
+    else
+        # Explicit size, so several homed users don't race for one partition.
+        sudo homectl create "{{ user }}" --storage=luks --disk-size="{{ size }}"
+    fi
 
     # homed users never pass through useradd, so nothing allocates their
     # subordinate IDs, and rootless podman needs them. Take the next 65536 block
@@ -109,3 +115,52 @@ dotfiles github_user:
 [group('Daily driver')]
 etc-drift:
     sudo ostree admin config-diff
+
+# Explain where a file came from: an RPM, an overlay, a build step, or this machine.
+[group('Daily driver')]
+provenance path:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    MANIFEST="${PROVENANCE_MANIFEST:-/usr/share/daily-driver-os/provenance.tsv}"
+    # -s keeps a symlink as itself; -m allows paths that don't exist (yet).
+    p="$(realpath -ms -- "{{ path }}")"
+    echo "${p}"
+    [[ -e "${p}" || -L "${p}" ]] || echo "  does not exist on this machine"
+
+    # rpm prints "not owned by any package" on stdout, so keep output only on success.
+    owner=""
+    if out="$(rpm -qf --qf '%{NAME}-%{VERSION}-%{RELEASE} (vendor: %{VENDOR})\n' -- "${p}" 2>/dev/null)"; then
+        owner="${out}"
+        echo "  RPM package: ${owner}"
+    fi
+    overlay="$(awk -F'\t' -v p="${p}" '$1 == p { print $2 }' "${MANIFEST}" 2>/dev/null || true)"
+    if [[ -n "${overlay}" ]]; then
+        echo "  overlaid at build time by: ${overlay}"
+    fi
+
+    case "${p}" in
+    /etc/*)
+        default="/usr/etc/${p#/etc/}"
+        if [[ ! -e "${default}" && ! -L "${default}" ]]; then
+            echo "  /etc: not in the image; created on this machine"
+        elif ! cmp -s -- "${p}" "${default}" 2>/dev/null; then
+            if [[ -r "${p}" && -r "${default}" ]]; then
+                echo "  /etc: DIFFERS from the image default: edited locally, so updates no longer change it"
+            else
+                echo "  /etc: can't read it; re-run with sudo to compare against the image default"
+            fi
+        else
+            echo "  /etc: matches the image default"
+        fi
+        ;;
+    /var/* | /home/*)
+        echo "  machine-local state: never part of the image, kept across updates"
+        ;;
+    esac
+
+    if [[ (-e "${p}" || -L "${p}") && -z "${owner}" && -z "${overlay}" &&
+        "${p}" != /etc/* && "${p}" != /var/* && "${p}" != /home/* ]]; then
+        echo "  no package or overlay claims it: made by a build step or a package scriptlet"
+    fi
+    echo "  details: docs/PROVENANCE.md in the image's repository"

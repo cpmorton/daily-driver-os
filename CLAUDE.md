@@ -3,8 +3,9 @@
 # daily-driver-os
 
 A public bootc image for one person's workstation, built on the finpilot
-template. Read `docs/ARCHITECTURE.md` before changing anything: it says which
-layer owns what, and most wrong changes put something in the wrong layer.
+template. Read `docs/README.md` first, then `docs/ARCHITECTURE.md`: most wrong
+changes put something in the wrong layer. `docs/decisions/` says why things are
+the way they are; check there before "fixing" something deliberate.
 
 ## Invariants
 
@@ -25,6 +26,14 @@ layer owns what, and most wrong changes put something in the wrong layer.
 - **Access model.** Root stays locked. localadmin stays local-only (pam_access +
   sshd). Rootful podman stays masked. Changing any of these needs the user's
   explicit say-so.
+
+## Documentation is part of the change
+
+- Every file, package, service change, Flatpak or recipe you add gets a row in
+  `docs/PROVENANCE.md`; the contract test fails otherwise.
+- Every choice with real alternatives gets a record in `docs/decisions/`, and
+  a line in its index. Supersede, don't rewrite.
+- Mark anything not proven on a real machine **[VERIFY]**.
 
 ## Before committing
 
