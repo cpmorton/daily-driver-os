@@ -52,8 +52,11 @@ follow the testing channel and skip the release gate.
 
 Read finpilot's `_build-bib` and `_rootful_load_image`: a registry image
 reference is pulled into root podman, and the ISO's install target comes from
-`image-info.json`. [VERIFY on the first run: runner disk space is enough, and
-the artifact downloads.]
+`image-info.json`. First run, 2026-09-25 (run 36093198733, from `:stable`):
+the hosted runner's disk was enough and the build took 13.5 minutes; the ISO
+is 5,095,075,840 bytes (4.75 GiB), over the 2 GiB release-asset limit, so a
+GitHub Release asset is ruled out. [VERIFY: the artifact downloads on Windows
+and its SHA-256 matches the `.sha256` file beside it.]
 
 ## Revisit when
 
