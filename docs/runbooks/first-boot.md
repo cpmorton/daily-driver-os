@@ -32,7 +32,7 @@ How the encrypted disk opens at every boot
 | Method | At boot | Needs |
 | --- | --- | --- |
 | `tpm2` | Nothing to type. But whoever holds the laptop can get a root shell from the GRUB menu (not users' homes) | A TPM2 chip (most laptops since 2016) |
-| `tpm2-pin` | A short PIN | A TPM2 chip |
+| `tpm2-pin` (default) | A short PIN | A TPM2 chip |
 | `fido2` | Plug in and touch the security key (and its PIN, if set) | A FIDO2 key such as a YubiKey. Enroll a spare when asked |
 | `passphrase` | The installer's passphrase | Nothing |
 

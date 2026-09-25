@@ -22,7 +22,7 @@
 
 .EXAMPLE
   # Machine values; asks for localadmin's password and stores only its hash.
-  .\Set-DailyDriverDefaults.ps1 -Hostname lap-01 -SetLocalAdminPassword -DiskUnlock tpm2
+  .\Set-DailyDriverDefaults.ps1 -Hostname lap-01 -SetLocalAdminPassword -DiskUnlock tpm2-pin
 
 .EXAMPLE
   # Add or update a daily user; run once per user.

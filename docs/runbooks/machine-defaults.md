@@ -21,7 +21,7 @@ the file, then **Download raw file**):
 Set-ExecutionPolicy -Scope Process Bypass     # this window only
 
 # Machine values. Asks for localadmin's password twice; stores only its hash.
-.\Set-DailyDriverDefaults.ps1 -Hostname lap-01 -SetLocalAdminPassword -DiskUnlock tpm2
+.\Set-DailyDriverDefaults.ps1 -Hostname lap-01 -SetLocalAdminPassword -DiskUnlock tpm2-pin
 
 # One run per daily user; run again to change one.
 .\Set-DailyDriverDefaults.ps1 -User chris -RealName 'Chris' -Uid 60101 -Shell /bin/bash -HomeSizeGB 200
@@ -37,7 +37,7 @@ Set-ExecutionPolicy -Scope Process Bypass     # this window only
 | `-SetLocalAdminPassword` | Asks for localadmin's password (12+ characters) and stores its SHA-512 crypt hash |
 | `-LocalAdminHash '$6$...'` | Stores a hash you already have, e.g. from another machine's `/etc/shadow` (`$y$` works too) |
 | `-ClearLocalAdminPassword` | Removes the hash: first boot asks for the password |
-| `-DiskUnlock tpm2` | Default unlock method: `tpm2`, `tpm2-pin`, `fido2` (security key) or `passphrase`. [first-boot.md](first-boot.md#disk-unlock) |
+| `-DiskUnlock tpm2-pin` | Default unlock method: `tpm2-pin` (the default without this option, when there's a TPM), `tpm2`, `fido2` (security key) or `passphrase`. [first-boot.md](first-boot.md#disk-unlock) |
 | `-User NAME` | Adds or updates a daily user. With `-RealName`, `-Uid` (60001-60513), `-Shell` (e.g. `/bin/zsh`; must exist in the image), `-HomeSizeGB` (default 100), `-MustChangePassword` (you'll type their first password; they change it at first login) |
 | `-RemoveUser NAME` | Removes a user from the defaults |
 | `-AddFlatpak ID`, `-RemoveFlatpak ID` | Extra Flatpaks for this machine, beyond the image's |

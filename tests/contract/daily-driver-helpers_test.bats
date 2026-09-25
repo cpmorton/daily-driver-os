@@ -315,9 +315,16 @@ disk_unlock() {
 	[ ! -s "${CALLS}" ]
 }
 
+@test "disk-unlock: with a TPM and no default, tpm2-pin is offered" {
+	touch "${BATS_TEST_TMPDIR}/tpmrm0"
+	disk_unlock <<<$'\nn'
+	[ "$status" -eq 0 ]
+	grep -q -- '--tpm2-with-pin=yes' "${CALLS}"
+}
+
 @test "disk-unlock: tpm2 binds to PCR 7 and adds a recovery key" {
 	touch "${BATS_TEST_TMPDIR}/tpmrm0"
-	disk_unlock <<<$'\n\n\n'
+	disk_unlock tpm2 <<<$'\n\n\n'
 	[ "$status" -eq 0 ]
 	grep -qx 'systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7 --wipe-slot=tpm2,fido2 /dev/nvme0n1p3' "${CALLS}"
 	grep -qx 'systemd-cryptenroll --recovery-key /dev/nvme0n1p3' "${CALLS}"

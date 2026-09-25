@@ -19,12 +19,16 @@ encrypted filesystems, and a choice per machine of how the disk unlocks.
   typed there. The kickstart can't pre-select it without taking over
   partitioning, which stays manual beside Windows.
 - **Choose the unlock method at first boot**, defaulting to the machine
-  defaults' `diskUnlock` ([0020](0020-machine-defaults-on-the-esp.md)), or
-  later with `ujust disk-unlock`:
+  defaults' `diskUnlock` ([0020](0020-machine-defaults-on-the-esp.md)), else
+  `tpm2-pin` when there's a TPM (else `passphrase`), or later with
+  `ujust disk-unlock`:
   - `tpm2`: the TPM unlocks it with no typing. Enrolled with
     `systemd-cryptenroll --tpm2-device=auto --tpm2-pcrs=7`: PCR 7 measures the
     Secure Boot state, so kernel and bootc updates don't break it.
-  - `tpm2-pin`: the TPM plus a PIN at every boot.
+  - `tpm2-pin` (the default): the TPM plus a PIN at every boot. The TPM's
+    dictionary-attack lockout throttles wrong PINs, so a short PIN holds up
+    far better than a short passphrase would, and the GRUB-edit gap below
+    closes.
   - `fido2`: a security key (YubiKey), touched at every boot; a spare can be
     enrolled.
   - `passphrase`: the installer's passphrase at every boot.

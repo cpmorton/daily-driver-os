@@ -56,7 +56,8 @@ have_tpm=0
 [[ -e "${TPM_DEVICE}" ]] && have_tpm=1
 default="${1:-}"
 if [[ -z "${default}" ]]; then
-	if ((have_tpm)); then default=tpm2; else default=passphrase; fi
+	# TPM plus PIN: plain tpm2 unlocks for anyone at the GRUB menu (decision 0021).
+	if ((have_tpm)); then default=tpm2-pin; else default=passphrase; fi
 fi
 
 echo
