@@ -68,7 +68,7 @@ Everything under `custom/files/` lands at the same path in the image.
 | `/etc/gitconfig` | Git defaults for every account; GitHub credentials through gh | [0004](decisions/0004-where-software-goes.md) |
 | `/etc/security/access.d/50-localadmin.conf` | pam_access: localadmin only where `PAM_RHOST` is unset | [0005](decisions/0005-accounts-and-access.md) |
 | `/etc/ssh/sshd_config.d/10-hardening.conf` | `PermitRootLogin no`, `DenyUsers localadmin` | [0005](decisions/0005-accounts-and-access.md) |
-| `/etc/tmpfiles.d/podman-docker.conf` | Symlink to `/dev/null`: masks the system `/run/docker.sock` → rootful socket link | [0006](decisions/0006-rootless-podman-only.md) |
+| `/etc/tmpfiles.d/podman-docker.conf` | Empty file: masks the system `/run/docker.sock` → rootful socket link | [0006](decisions/0006-rootless-podman-only.md) |
 | `/usr/lib/environment.d/60-docker-host.conf` | `DOCKER_HOST` = the user's rootless podman socket, for every app | [0006](decisions/0006-rootless-podman-only.md) |
 | `/usr/lib/systemd/journald.conf.d/60-volatile.conf` | Journal in RAM only, 256M cap | [0010](decisions/0010-var-journal-tmp.md) |
 | `/usr/lib/systemd/system/brew-setup.service.d/10-var-home.conf` | Unpack Homebrew only after `/var/home` is mounted (a no-op unless it's a separate mount) | [0011](decisions/0011-homebrew-single-owner.md) |
