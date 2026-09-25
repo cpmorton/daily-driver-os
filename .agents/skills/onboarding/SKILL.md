@@ -100,6 +100,15 @@ open pull requests, so it needs to act as you.
 > A classic token carries every permission you have, on every repository you can
 > reach. If you would rather not, create a fine-grained token instead, scoped to
 > this repository, with **Contents: Read and write** and **Workflows: Write**.
+>
+> **A fine-grained token currently fails the Renovate run.** The "Validate
+> RENOVATE_TOKEN" step (`check-token-health` in `projectbluefin/actions`,
+> pinned at `837850b`) reads the `X-OAuth-Scopes` header with `grep` under
+> `pipefail`. GitHub sends that header only for classic and OAuth tokens, so
+> with a fine-grained token the step exits 1 with no message, right after the
+> token authenticated. Use a classic token until that action tolerates the
+> missing header. Found 2026-09-25: the same fine-grained token got 200 from
+> `/user` and no `X-OAuth-Scopes` header.
 
 ### Store it as a secret
 
@@ -286,6 +295,10 @@ more than documentation produces a green `Build and Push Image` run and a
   that is not documentation-only and try again.
 - **Renovate opens no pull requests** — the token is missing, expired, or lacks
   the `workflow` scope (step 5).
+- **"Validate RENOVATE_TOKEN" fails with no message** — the token is
+  fine-grained; see the note in step 5. **"invalid or expired (HTTP 401)"** —
+  the saved value is not a live token: blank, cut short, or replaced by a later
+  regeneration.
 - **The promotion PR never opens** — `stable` does not exist (step 6).
 - **The promotion PR cannot merge** — `stable` requires an approval, or the
   check name is not exactly `validate` (steps 7–8).
