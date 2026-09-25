@@ -239,7 +239,14 @@ grep -q 'exec /usr/bin/podman' /usr/bin/docker
 # shellcheck disable=SC2016 # matching the literal ${XDG_RUNTIME_DIR} in the file
 grep -qF 'DOCKER_HOST=unix://${XDG_RUNTIME_DIR}/podman/podman.sock' \
 	/usr/lib/environment.d/60-docker-host.conf
-[[ "$(readlink /etc/tmpfiles.d/podman-docker.conf)" == /dev/null ]]
+# An empty file, not a /dev/null link: bootc's var-tmpfiles lint cannot follow
+# an absolute symlink out of the image root. systemd treats both as a mask.
+[[ -f /etc/tmpfiles.d/podman-docker.conf && ! -L /etc/tmpfiles.d/podman-docker.conf ]]
+[[ ! -s /etc/tmpfiles.d/podman-docker.conf ]]
+if grep -qF /run/docker.sock <<<"$(systemd-tmpfiles --cat-config)"; then
+	echo "the system /run/docker.sock entry is not masked" >&2
+	exit 1
+fi
 git config --system --get init.defaultBranch
 # Provenance manifest: covers this repository's files and upstream's overlays.
 grep -qP '^/etc/gitconfig\tthis repository' "${MANIFEST}"

@@ -18,7 +18,10 @@ group is equivalent to root. Devcontainers still expect a `docker` command.
   links to podman-compose. `/usr/lib/environment.d/60-docker-host.conf` points
   `DOCKER_HOST` at the user's socket for every app, GUI included.
 - podman-docker's *system* tmpfiles entry (`/run/docker.sock` → the rootful
-  socket) is masked; its per-user entry is kept.
+  socket) is masked; its per-user entry is kept. The mask is an empty
+  `/etc/tmpfiles.d/podman-docker.conf`, not a `/dev/null` symlink: bootc's
+  `var-tmpfiles` lint fails with "a path led outside of the filesystem" on
+  an absolute symlink there, and systemd treats an empty file as a mask too.
 
 ## Alternatives
 
@@ -38,7 +41,10 @@ group is equivalent to root. Devcontainers still expect a `docker` command.
 
 podman's upstream `rpm/podman.spec`, `docker/docker.in`,
 `docker/podman-docker.sh` and `contrib/systemd/system/podman-docker.conf`, read
-2026-09-23. systemd's `environment.d(5)` for `${VAR}` expansion.
+2026-09-23. systemd's `environment.d(5)` for `${VAR}` expansion. On the
+pinned Silverblue 44 base (2026-09-25): `bootc container lint` fails with the
+`/dev/null` symlink and passes with the empty file, and
+`systemd-tmpfiles --cat-config` reports the empty file as a mask.
 [VERIFY in a VM: `systemctl --user show-environment | grep DOCKER_HOST`, and a
 compose-based devcontainer.]
 
