@@ -7,7 +7,7 @@ GHCR. Updating, rolling back or reinstalling the machine means moving between
 image digests; the image owns everything under `/usr`.
 
 What the image does **not** own: user state (the
-[`dotfiles`](https://github.com/OWNER/dotfiles) repository, applied with
+[`dotfiles`](https://github.com/cpmorton/dotfiles) repository, applied with
 chezmoi), secrets (never in any repository), and account-side integrations
 (claude.ai connectors, GitHub, Google).
 
@@ -147,9 +147,9 @@ CI signs every image with keyless OIDC via Cosign; there is no key to manage.
 
 ```bash
 cosign verify \
-  --certificate-identity-regexp="https://github.com/OWNER/daily-driver-os/.github/workflows/" \
+  --certificate-identity-regexp="https://github.com/cpmorton/daily-driver-os/.github/workflows/" \
   --certificate-oidc-issuer="https://token.actions.githubusercontent.com" \
-  ghcr.io/OWNER/daily-driver-os:stable
+  ghcr.io/cpmorton/daily-driver-os:stable
 ```
 
 Unsigned images fail the promotion gate, so `main → stable` reports

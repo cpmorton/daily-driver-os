@@ -30,5 +30,5 @@ laptop.
 | `:stable-testing` | every push to `main`, and nightly | trying a change first |
 
 ```bash
-sudo bootc switch ghcr.io/OWNER/daily-driver-os:stable-testing   # and back to :stable
+sudo bootc switch ghcr.io/cpmorton/daily-driver-os:stable-testing   # and back to :stable
 ```

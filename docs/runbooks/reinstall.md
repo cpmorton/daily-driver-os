@@ -79,7 +79,7 @@ After: skip those users at first boot, then `ujust restore-home` them.
 ## Alternative: switch an existing Fedora Atomic install
 
 ```bash
-sudo bootc switch ghcr.io/OWNER/daily-driver-os:stable
+sudo bootc switch ghcr.io/cpmorton/daily-driver-os:stable
 sudo systemctl reboot
 ```
 

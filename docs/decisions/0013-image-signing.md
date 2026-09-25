@@ -34,5 +34,5 @@ GHCR plus GitHub account security, until key-based signing is added.
 
 Key-based Cosign signing (key in a repository secret), plus a
 `sigstoreSigned` `policy.json` entry and `registries.d` file for
-`ghcr.io/OWNER/daily-driver-os`, verified with the `.sig` tag check from
+`ghcr.io/cpmorton/daily-driver-os`, verified with the `.sig` tag check from
 Bluefin's `docs/skills/security/references/signing.md`.
