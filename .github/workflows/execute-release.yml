@@ -72,7 +72,7 @@ jobs:
       issues: write
       packages: write
       pull-requests: write
-    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@837850b6100b22c7920476035e7e1c28fdbba67f # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@2046241cc5bed381f03666a4f136409c11d2a14e # v1
     with:
       registry: ghcr.io/${{ github.repository_owner }}
       variants: >-
@@ -101,13 +101,17 @@ jobs:
       contents: write
       id-token: write
       packages: read
-    # Finpilot's direct build does not upload an SBOM artifact. The supported
-    # reusable inline mode scans the already-promoted stable image instead.
-    uses: projectbluefin/actions/.github/workflows/reusable-release.yml@837850b6100b22c7920476035e7e1c28fdbba67f # v1
+    # The inline Syft scan of the promoted image kills the runner VM before its
+    # own timeout can fall back (decision 0023). The build uploads no SBOM
+    # artifact, so artifact mode takes the reusable's placeholder-SBOM fallback
+    # and the release is still created.
+    uses: projectbluefin/actions/.github/workflows/reusable-release.yml@2046241cc5bed381f03666a4f136409c11d2a14e # v1
     with:
       stream_name: stable
       image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
-      generate_sbom_inline: true
+      generate_sbom_inline: false
+      build_workflow: build-image.yml
+      build_branch: main
       checkout_ref: stable
       project_name: ${{ github.event.repository.name }}
       badge_label: Stable
