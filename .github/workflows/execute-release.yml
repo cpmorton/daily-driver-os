@@ -72,7 +72,7 @@ jobs:
       issues: write
       packages: write
       pull-requests: write
-    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@44f126717d9c45856fbcff368eb87ce0f26773d3 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-execute-release.yml@f55c40caae7abf265b1f914dae21c519d1f18716 # v1
     with:
       registry: ghcr.io/${{ github.repository_owner }}
       variants: >-
@@ -105,7 +105,7 @@ jobs:
     # own timeout can fall back (decision 0023). The build uploads no SBOM
     # artifact, so artifact mode takes the reusable's placeholder-SBOM fallback
     # and the release is still created.
-    uses: projectbluefin/actions/.github/workflows/reusable-release.yml@44f126717d9c45856fbcff368eb87ce0f26773d3 # v1
+    uses: projectbluefin/actions/.github/workflows/reusable-release.yml@f55c40caae7abf265b1f914dae21c519d1f18716 # v1
     with:
       stream_name: stable
       image: ghcr.io/${{ github.repository_owner }}/${{ github.event.repository.name }}
