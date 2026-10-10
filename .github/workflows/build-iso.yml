@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup runner
-        uses: projectbluefin/actions/bootc-build/setup-runner@837850b6100b22c7920476035e7e1c28fdbba67f # v1
+        uses: projectbluefin/actions/bootc-build/setup-runner@a52da5670b9337598cbc80c4d6a9a7b21e770aec # v1
         with:
           storage-backend: btrfs
           native-overlay: "true"
@@ -80,7 +80,7 @@ jobs:
           } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ${{ github.event.repository.name }}-${{ inputs.tag }}-iso
           path: |
