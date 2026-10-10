@@ -63,6 +63,14 @@ The identity regexp the release workflows pass to the reusables is scoped with
 any repository accepts a signature minted by any repository in the org, and
 `github.repository` keeps the scope correct in a fork without hardcoding it.
 
+## Release SBOM
+
+`execute-release.yml` calls the release reusable in artifact mode, and the
+release gets a placeholder SBOM. The inline Syft scan killed the runner VM on
+this image before its fallback could run, so no release was created
+([0023](../../../docs/decisions/0023-release-without-inline-sbom.md)).
+Don't switch it back without a scan that fits the runner.
+
 ## Renovate
 
 Self-hosted through `projectbluefin/actions`, running every six hours. It pins
