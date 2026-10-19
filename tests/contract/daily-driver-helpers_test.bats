@@ -53,7 +53,7 @@ write_defaults() {
  "localadmin": {"hashedPassword": "$6$rounds=5000$saltsalt$abcdefghijklmnopqrstuv"},
  "diskUnlock": "tpm2",
  "users": [{"userName": "chris", "realName": "Chris M", "uid": 60101, "shell": "/bin/zsh",
-            "diskSize": 214748364800, "passwordChangeNow": false},
+            "diskSize": 214748364800, "passwordChangeNow": false, "dotfiles": "chris-gh"},
            {"userName": "violet", "passwordChangeNow": true}],
  "flatpaks": ["org.gnome.Boxes"]}
 EOF
@@ -78,6 +78,7 @@ preinstall() { echo "${SANDBOX}/etc/flatpak/preinstall.d/60-machine-defaults.pre
 	[ "$(jq -c 'keys' "$(imported)")" = '["diskUnlock","flatpaks","hostname","localadmin","users","version"]' ]
 	[ "$(jq -r '.users[0].shell' "$(imported)")" = /bin/zsh ]
 	[ "$(jq -r '.users[1].passwordChangeNow' "$(imported)")" = true ]
+	[ "$(jq -r '.users[0].dotfiles' "$(imported)")" = chris-gh ]
 	grep -qx '\[Flatpak Preinstall org.gnome.Boxes\]' "$(preinstall)"
 	grep -qx 'Branch=stable' "$(preinstall)"
 }
@@ -89,7 +90,7 @@ preinstall() { echo "${SANDBOX}/etc/flatpak/preinstall.d/60-machine-defaults.pre
 	import_defaults
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"ignoring extra, localadmin.sshAuthorizedKeys, users[chris].memberOf, users[chris].secret"* ]]
-	[ "$(jq -c '.users[0] | keys' "$(imported)")" = '["diskSize","passwordChangeNow","realName","shell","uid","userName"]' ]
+	[ "$(jq -c '.users[0] | keys' "$(imported)")" = '["diskSize","dotfiles","passwordChangeNow","realName","shell","uid","userName"]' ]
 	[ "$(jq -c '.localadmin | keys' "$(imported)")" = '["hashedPassword"]' ]
 	refute grep -rq hunter2 "${SANDBOX}"
 }
@@ -99,7 +100,9 @@ preinstall() { echo "${SANDBOX}/etc/flatpak/preinstall.d/60-machine-defaults.pre
 	for change in '.localadmin.hashedPassword = "plaintext"' '.users[0].uid = 1000' \
 		'.diskUnlock = "usb"' '.users[1].userName = "chris"' '.users[0].userName = "localadmin"' \
 		'.hostname = "not a host"' '.flatpaks = ["boxes"]' '.users[1].uid = 60101' '.localadmin = "x"' \
-		'.users[0].diskSize = 1e40' '.users[0].userName = "Chris"'; do
+		'.users[0].diskSize = 1e40' '.users[0].userName = "Chris"' \
+		'.users[0].dotfiles = "git@github.com:chris/dotfiles"' '.users[0].dotfiles = "a b"' \
+		'.users[0].dotfiles = 5' '.users[0].dotfiles = "--debug"'; do
 		write_defaults
 		set_field "${change}"
 		import_defaults
@@ -217,6 +220,10 @@ first_users() {
 	grep -qxF 'homectl create chris --real-name=Chris M --storage=luks --disk-size=200G --uid=60101 --shell=/bin/zsh --password-change-now=no' "${CALLS}"
 	grep -qxF 'homectl create violet --real-name=violet --storage=luks --disk-size=100G --password-change-now=yes' "${CALLS}"
 	grep -qx 'ensure-subids ' "${CALLS}"
+	# chris's dotfiles wait for his first login; violet has none.
+	[ "$(cat "${SANDBOX}/var/lib/daily-driver/dotfiles/chris")" = chris-gh ]
+	[ "$(stat -c %a "${SANDBOX}/var/lib/daily-driver/dotfiles/chris")" = 644 ]
+	[ ! -e "${SANDBOX}/var/lib/daily-driver/dotfiles/violet" ]
 }
 
 @test "first-users: a user can be skipped to restore a backup later" {
@@ -226,6 +233,8 @@ first_users() {
 	[ "$status" -eq 0 ]
 	refute grep -q '^homectl create' "${CALLS}"
 	[[ "$output" == *"ujust restore-home chris"* ]]
+	# The restored home may predate its dotfiles: they still apply at login.
+	[ "$(cat "${SANDBOX}/var/lib/daily-driver/dotfiles/chris")" = chris-gh ]
 }
 
 @test "first-users: a shell that isn't installed falls back to the default" {
@@ -239,11 +248,20 @@ first_users() {
 }
 
 @test "first-users: with no defaults, asks for each user's details" {
-	# First user: yes. Invalid name, too-small home, then a good user; stop.
-	first_users <<<$'\nBad Name\nchris\nChris M\n5\nchris\nChris M\n50\ny\nn'
+	# First user: yes. Invalid name, too-small home, then a good user with no
+	# dotfiles; stop.
+	first_users <<<$'\nBad Name\nchris\nChris M\n5\nchris\nChris M\n50\n\ny\nn'
 	[ "$status" -eq 0 ]
 	grep -qxF 'homectl create chris --real-name=Chris M --storage=luks --disk-size=50G --password-change-now=no' "${CALLS}"
 	[ "$(grep -c '^homectl create' "${CALLS}")" -eq 1 ]
+	[ ! -e "${SANDBOX}/var/lib/daily-driver/dotfiles/chris" ]
+}
+
+@test "first-users: with no defaults, a typed dotfiles repository is checked and kept" {
+	first_users <<<$'\nchris\nChris M\n50\ngit@github.com:chris/dotfiles\nhttps://git.example.org/chris/dots.git\ny\nn'
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"Not a GitHub user or https URL"* ]]
+	[ "$(cat "${SANDBOX}/var/lib/daily-driver/dotfiles/chris")" = https://git.example.org/chris/dots.git ]
 }
 
 @test "first-users: with no defaults, no user at all is fine (restore later)" {
@@ -290,6 +308,92 @@ first_users() {
 
 @test "first-users: never hands homectl a password" {
 	refute grep -nE 'NEWPASSWORD|secret|--password=' "${LIBEXEC}/first-users"
+}
+
+# --- dotfiles-sync -------------------------------------------------------------
+
+# Runs as chris, home in the sandbox. chezmoi init clones (makes the source
+# directory) and then fails if FLAGS/init-fails; update fails if FLAGS/update-fails.
+dotfiles_sync() {
+	export HOME="${BATS_TEST_TMPDIR}/home" USER=chris
+	unset XDG_STATE_HOME
+	mkdir -p "${HOME}"
+	stub chezmoi "case \"\$1\" in
+		source-path) echo \"\${HOME}/.local/share/chezmoi\" ;;
+		init) mkdir -p \"\${HOME}/.local/share/chezmoi\"; [[ ! -e '${FLAGS}/init-fails' ]] ;;
+		update) [[ ! -e '${FLAGS}/update-fails' ]] ;;
+		esac"
+	stub gdbus
+	DOTFILES_ROOT="${SANDBOX}" run "${LIBEXEC}/dotfiles-sync"
+}
+
+seed_dotfiles() {
+	mkdir -p "${SANDBOX}/var/lib/daily-driver/dotfiles"
+	echo "$1" >"${SANDBOX}/var/lib/daily-driver/dotfiles/chris"
+}
+
+applied() { echo "${BATS_TEST_TMPDIR}/home/.local/state/daily-driver/dotfiles-applied"; }
+
+@test "dotfiles-sync: no repository and no earlier apply does nothing" {
+	dotfiles_sync
+	[ "$status" -eq 0 ]
+	[ ! -s "${CALLS}" ]
+}
+
+@test "dotfiles-sync: first login applies the named repository with no terminal" {
+	seed_dotfiles chris-gh
+	dotfiles_sync
+	[ "$status" -eq 0 ]
+	grep -qxF 'chezmoi init --apply --no-tty --promptDefaults chris-gh' "${CALLS}"
+	[ -e "$(applied)" ]
+	refute grep -q '^gdbus' "${CALLS}"
+}
+
+@test "dotfiles-sync: a failed first apply starts clean next time, and says so" {
+	seed_dotfiles chris-gh
+	touch "${FLAGS}/init-fails"
+	dotfiles_sync
+	[ "$status" -eq 1 ]
+	[ ! -e "${HOME}/.local/share/chezmoi" ]
+	[ ! -e "$(applied)" ]
+	grep -q '^gdbus call --session' "${CALLS}"
+	[[ "$output" == *"ujust dotfiles"* ]]
+}
+
+@test "dotfiles-sync: a clone it didn't make is never removed" {
+	seed_dotfiles chris-gh
+	touch "${FLAGS}/init-fails"
+	mkdir -p "${BATS_TEST_TMPDIR}/home/.local/share/chezmoi"
+	dotfiles_sync
+	[ "$status" -eq 1 ]
+	[ -d "${HOME}/.local/share/chezmoi" ]
+}
+
+@test "dotfiles-sync: after the first apply, updates without overwriting local changes" {
+	mkdir -p "$(dirname "$(applied)")"
+	touch "$(applied)"
+	dotfiles_sync
+	[ "$status" -eq 0 ]
+	grep -qxF 'chezmoi update --no-tty --error-on-conflict' "${CALLS}"
+	refute grep -q '^chezmoi init' "${CALLS}"
+}
+
+@test "dotfiles-sync: an update that needs a person notifies once and fails" {
+	mkdir -p "$(dirname "$(applied)")"
+	touch "$(applied)" "${FLAGS}/update-fails"
+	dotfiles_sync
+	[ "$status" -eq 1 ]
+	[ "$(grep -c '^gdbus' "${CALLS}")" -eq 1 ]
+}
+
+@test "dotfiles-sync: a repository that isn't one is refused" {
+	for bad in 'git@github.com:chris/dotfiles' 'chris; rm -rf ~' '--source=/tmp/x' '--debug'; do
+		: >"${CALLS}"
+		seed_dotfiles "${bad}"
+		dotfiles_sync
+		[ "$status" -eq 1 ] || { echo "accepted: ${bad}" >&2; return 1; }
+		refute grep -q '^chezmoi init' "${CALLS}"
+	done
 }
 
 # --- disk-unlock ---------------------------------------------------------------
@@ -568,7 +672,9 @@ pwsh_defaults() {
 	pwsh_defaults "
 		& '${PS1_SCRIPT}' -Path '${esp}' -Hostname lap-01 -SetLocalAdminPassword -DiskUnlock fido2 -Rounds 5000
 		& '${PS1_SCRIPT}' -Path '${esp}' -User chris -RealName 'Chris M' -Uid 60101 -Shell /bin/zsh -HomeSizeGB 200
-		& '${PS1_SCRIPT}' -Path '${esp}' -User violet -MustChangePassword
+		& '${PS1_SCRIPT}' -Path '${esp}' -User chris -Dotfiles chris-gh
+		& '${PS1_SCRIPT}' -Path '${esp}' -User violet -MustChangePassword -Dotfiles violet/dots
+		& '${PS1_SCRIPT}' -Path '${esp}' -User violet -NoDotfiles
 		& '${PS1_SCRIPT}' -Path '${esp}' -AddFlatpak org.gnome.Boxes,org.gnome.Maps
 		& '${PS1_SCRIPT}' -Path '${esp}' -RemoveFlatpak org.gnome.Maps
 		& '${PS1_SCRIPT}' -Path '${esp}' -RemoveUser violet
@@ -581,7 +687,7 @@ pwsh_defaults() {
 	[ "$(jq -r .hostname "$(imported)")" = lap-01 ]
 	[ "$(jq -r .diskUnlock "$(imported)")" = fido2 ]
 	[[ "$(jq -r .localadmin.hashedPassword "$(imported)")" == '$6$'* ]]
-	[ "$(jq -c '.users' "$(imported)")" = '[{"userName":"chris","realName":"Chris M","uid":60101,"shell":"/bin/zsh","diskSize":214748364800}]' ]
+	[ "$(jq -c '.users' "$(imported)")" = '[{"userName":"chris","realName":"Chris M","uid":60101,"shell":"/bin/zsh","diskSize":214748364800,"dotfiles":"chris-gh"}]' ]
 	[ "$(jq -c '.flatpaks' "$(imported)")" = '["org.gnome.Boxes"]' ]
 	refute grep -rq 'correct horse' "${esp}" "${SANDBOX}"
 }
@@ -597,7 +703,8 @@ pwsh_defaults() {
 @test "defaults script: rejects values first boot would reject" {
 	command -v pwsh >/dev/null || skip "pwsh not installed"
 	for args in "-User chris -Uid 1000" "-LocalAdminHash hunter2" "-DiskUnlock usb" "-User localadmin" \
-		"-AddFlatpak boxes" "-Hostname 'not a host'" "-Uid 60101" "-User Chris" "-LocalAdminHash '\$Y\$abcdefgh'"; do
+		"-AddFlatpak boxes" "-Hostname 'not a host'" "-Uid 60101" "-User Chris" "-LocalAdminHash '\$Y\$abcdefgh'" \
+		"-User chris -Dotfiles git@github.com:chris/dots" "-Dotfiles chris" "-User chris -Dotfiles chris -NoDotfiles"; do
 		run pwsh -NoLogo -NoProfile -Command "& '${PS1_SCRIPT}' -Path '${BATS_TEST_TMPDIR}/s' ${args}"
 		[ "$status" -ne 0 ] || { echo "accepted: ${args}" >&2; return 1; }
 	done
