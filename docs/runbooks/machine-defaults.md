@@ -26,6 +26,7 @@ Set-ExecutionPolicy -Scope Process Bypass     # this window only
 # One run per daily user; run again to change one.
 .\Set-DailyDriverDefaults.ps1 -User chris -RealName 'Chris' -Uid 60101 -Shell /bin/bash -HomeSizeGB 200
 .\Set-DailyDriverDefaults.ps1 -User violet -RealName 'Violet' -MustChangePassword
+.\Set-DailyDriverDefaults.ps1 -User chris -Dotfiles chris-on-github     # applied at chris's first login
 
 .\Set-DailyDriverDefaults.ps1 -AddFlatpak org.gnome.Boxes    # extra apps, from Flathub
 .\Set-DailyDriverDefaults.ps1                                # show what's set
@@ -39,6 +40,7 @@ Set-ExecutionPolicy -Scope Process Bypass     # this window only
 | `-ClearLocalAdminPassword` | Removes the hash: first boot asks for the password |
 | `-DiskUnlock tpm2-pin` | Default unlock method: `tpm2-pin` (the default without this option, when there's a TPM), `tpm2`, `fido2` (security key) or `passphrase`. [first-boot.md](first-boot.md#disk-unlock) |
 | `-User NAME` | Adds or updates a daily user. With `-RealName`, `-Uid` (60001-60513), `-Shell` (e.g. `/bin/zsh`; must exist in the image), `-HomeSizeGB` (default 100), `-MustChangePassword` (you'll type their first password; they change it at first login) |
+| `-User NAME -Dotfiles REPO` | Their chezmoi dotfiles, applied at their first login and kept current: a GitHub user (meaning `<user>/dotfiles`), `user/repo`, or an `https://` URL. `-NoDotfiles` removes it. [0024](../decisions/0024-dotfiles-apply-themselves.md) |
 | `-RemoveUser NAME` | Removes a user from the defaults |
 | `-AddFlatpak ID`, `-RemoveFlatpak ID` | Extra Flatpaks for this machine, beyond the image's |
 | `-PrintHash` | Just prints a hash for a password you type, e.g. for your password manager |
@@ -69,7 +71,8 @@ password manager avoids retyping the password.
   "diskUnlock": "tpm2",
   "users": [
     { "userName": "chris", "realName": "Chris", "uid": 60101,
-      "shell": "/bin/bash", "diskSize": 214748364800, "passwordChangeNow": false }
+      "shell": "/bin/bash", "diskSize": 214748364800, "passwordChangeNow": false,
+      "dotfiles": "chris-on-github" }
   ],
   "flatpaks": ["org.gnome.Boxes"]
 }

@@ -205,7 +205,8 @@ upstream source on 2026-09-23; the ecosystem moves fast, so the
 
 **chezmoi**
 : Dotfiles manager. The separate `dotfiles` repository holds git identity and
-  the GitHub sign-in hook. [decision 0003](decisions/0003-two-repositories.md)
+  the GitHub sign-in hook, applied at each login by `dotfiles-sync`.
+  [decision 0003](decisions/0003-two-repositories.md), [0024](decisions/0024-dotfiles-apply-themselves.md)
 
 **Claude Code**
 : Anthropic's CLI coding agent, baked into the image.

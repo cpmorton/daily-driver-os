@@ -30,6 +30,7 @@ supersede a record with a new one and mark the old one's status.
 | 0021 | [The Linux root is encrypted; it unlocks by TPM2, security key or passphrase](0021-encrypted-root.md) | Accepted |
 | 0022 | [Back up and restore a user's whole encrypted home as one file](0022-home-backup-and-restore.md) | Accepted |
 | 0023 | [Stable releases carry a placeholder SBOM, not an inline Syft scan](0023-release-without-inline-sbom.md) | Accepted |
+| 0024 | [Dotfiles apply themselves at login and stay current](0024-dotfiles-apply-themselves.md) | Accepted |
 
 ## Template
 

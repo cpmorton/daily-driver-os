@@ -3,6 +3,10 @@
 - **Status:** Accepted
 - **Date:** 2026-09-23
 
+## Amendments
+
+- 2026-10-19, [0024](0024-dotfiles-apply-themselves.md): the dotfiles apply themselves at each user's login and update daily; `ujust dotfiles` is only needed when they ask a question.
+
 ## Context
 
 The machine and the user's home change at different rates and have different

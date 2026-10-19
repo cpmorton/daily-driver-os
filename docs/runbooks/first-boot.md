@@ -21,6 +21,9 @@ answer. If first boot is interrupted, it picks up after the last finished step.
      login.
    - The password, twice. It encrypts that user's home; localadmin can't open
      or recover it.
+   - Their dotfiles repository, if any: a GitHub user (meaning
+     `<user>/dotfiles`), `user/repo`, or an `https://` URL. Users from the
+     defaults use the defaults' `dotfiles`.
 
 The login screen appears when it's done.
 
@@ -48,7 +51,7 @@ If the root isn't encrypted, first boot says so in `!!!` lines. Reinstall with
 ## After first boot (localadmin)
 
 ```bash
-ujust homed-user <name> 100G           # more users later; each gets its own encrypted home
+ujust homed-user <name> 100G [repo]    # more users later; each gets its own encrypted home (and dotfiles)
 ujust restore-home <name> <folder>     # bring back a backed-up home (see home-backup.md)
 ujust disk-unlock                      # change the unlock method, or re-enroll the TPM
 ujust brew-owner <name>                # optional: let a daily user run brew install
@@ -56,8 +59,14 @@ ujust brew-owner <name>                # optional: let a daily user run brew ins
 
 ## After first boot (each user)
 
+Your dotfiles apply at your first login, if localadmin named a repository for
+you, and update daily after that
+([decision 0024](../decisions/0024-dotfiles-apply-themselves.md)). A
+notification says when they need you.
+
 ```bash
-ujust dotfiles <github-user>      # git identity and GitHub sign-in (the dotfiles repository)
+ujust dotfiles [github-user]      # only when asked, or to set up dotfiles nobody named for you
+gh auth login --web               # GitHub sign-in; the dotfiles also ask at your next ujust dotfiles
 claude                            # Claude Code: sign in with your claude.ai account
 ```
 

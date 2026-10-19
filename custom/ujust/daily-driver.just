@@ -5,11 +5,18 @@
 ## Machine and account setup for this image. Run as localadmin unless a
 ## recipe says otherwise. Nothing here runs automatically.
 
-# Create an encrypted (LUKS) systemd-homed user with rootless-podman subids.
+# Create an encrypted (LUKS) systemd-homed user with rootless-podman subids, and optionally their dotfiles repository.
 [group('Daily driver')]
-homed-user user size="100G":
+homed-user user size="100G" dotfiles="":
     #!/usr/bin/env bash
     set -euo pipefail
+
+    # Checked first, so a typo creates nothing. Same rule as first boot.
+    repo_re='^([A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9._-]+)?|https://[^[:space:]]+)$'
+    if [[ -n "{{ dotfiles }}" && ! "{{ dotfiles }}" =~ ${repo_re} ]]; then
+        echo "dotfiles: a GitHub user, user/repo, or an https URL" >&2
+        exit 1
+    fi
 
     # Idempotent: an existing user only gets its subordinate IDs checked.
     if homectl inspect "{{ user }}" >/dev/null 2>&1; then
@@ -19,6 +26,12 @@ homed-user user size="100G":
         sudo homectl create "{{ user }}" --storage=luks --disk-size="{{ size }}"
     fi
     sudo /usr/libexec/daily-driver/ensure-subids "{{ user }}"
+    if [[ -n "{{ dotfiles }}" ]]; then
+        # Read by dotfiles-sync at the user's first login; not a secret.
+        sudo install -d -m 0755 /var/lib/daily-driver/dotfiles
+        printf '%s\n' "{{ dotfiles }}" | sudo tee "/var/lib/daily-driver/dotfiles/{{ user }}" >/dev/null
+        echo "Their dotfiles ({{ dotfiles }}) apply at their first login."
+    fi
     echo "Done. {{ user }} can sign in at the login screen."
 
 # Hand the Homebrew prefix and its update timers to one user (default: localadmin).
@@ -46,15 +59,36 @@ brew-owner user:
     sudo systemctl daemon-reload
     echo "Homebrew now belongs to {{ user }}."
 
-# Apply your dotfiles repository (chezmoi) to the current user's home.
+# Apply or update your dotfiles (chezmoi) here, answering what they ask. After that they update at every login and daily.
 [group('Daily driver')]
-dotfiles github_user:
+dotfiles repo="":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    # Run as the daily user, not localadmin. Defaults to <user>/dotfiles on GitHub.
-    chezmoi init --apply "{{ github_user }}"
-    echo "Applied. Later: chezmoi update"
+    # localadmin administers the machine; it has no personal dotfiles (decision 0005).
+    if [[ "${USER}" == localadmin ]]; then
+        echo "Run this as the daily user, not localadmin." >&2
+        exit 1
+    fi
+    repo="{{ repo }}"
+    if [[ -z "${repo}" ]]; then
+        repo="$(head -n1 "/var/lib/daily-driver/dotfiles/${USER}" 2>/dev/null || true)"
+    fi
+    if [[ -d "$(chezmoi source-path)" && -z "{{ repo }}" ]]; then
+        # Pull, ask anything new, and settle files you changed here.
+        chezmoi update --init
+    elif [[ -n "${repo}" ]]; then
+        # A GitHub user means <user>/dotfiles.
+        chezmoi init --apply "${repo}"
+    else
+        echo "No dotfiles repository yet: ujust dotfiles <github-user or https URL>" >&2
+        exit 1
+    fi
+    # From now on daily-driver-dotfiles.service and .timer keep it current.
+    state="${XDG_STATE_HOME:-${HOME}/.local/state}/daily-driver"
+    mkdir -p "${state}"
+    touch "${state}/dotfiles-applied"
+    echo "Applied. They update at every login and daily; to settle anything by hand: ujust dotfiles"
 
 # List /etc files that have drifted from the image; the image no longer manages them.
 [group('Daily driver')]

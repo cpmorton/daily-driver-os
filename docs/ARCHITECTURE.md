@@ -9,7 +9,7 @@ inventory is [PROVENANCE.md](PROVENANCE.md); the reasons are in
 | --- | --- | --- | --- |
 | OS, packages, policy | `/usr`, plus `/etc` files never edited locally | Replaced atomically | This repository |
 | Machine state | Locally edited `/etc`, all of `/var` | Persists, and drifts | Keep it small; `ujust etc-drift` |
-| User state | systemd-homed LUKS homes, one encrypted file per user in `/var/home` | Untouched (a reinstall wipes them) | The `dotfiles` repository (chezmoi): identity and sign-ins only |
+| User state | systemd-homed LUKS homes, one encrypted file per user in `/var/home` | Untouched (a reinstall wipes them) | The `dotfiles` repository (chezmoi): identity and sign-ins only, applied at login and daily ([0024](decisions/0024-dotfiles-apply-themselves.md)) |
 | Secrets | GNOME Keyring; password manager to be decided | Untouched | Never in any repository |
 | Integrations | claude.ai connectors, GitHub and Google accounts | Account-side | Nothing to image |
 

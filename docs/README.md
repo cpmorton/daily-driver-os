@@ -20,7 +20,8 @@ Read in this order. Each page links to the next level of detail.
    [recover](runbooks/recover.md).
 
 The per-user half (git identity, GitHub sign-in) is the separate `dotfiles`
-repository; [decision 0003](decisions/0003-two-repositories.md) explains the split.
+repository; [decision 0003](decisions/0003-two-repositories.md) explains the split,
+and [0024](decisions/0024-dotfiles-apply-themselves.md) how it applies itself at login.
 
 ## Keeping it true
 
