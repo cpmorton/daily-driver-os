@@ -4,6 +4,9 @@ Linux goes into free space on the laptop's internal disk, beside Windows. No
 Linux needed anywhere; everything is prepared on Windows.
 [Decision 0017](../decisions/0017-dual-boot-internal-disk.md).
 
+> No USB stick? [reinstall-no-usb.md](reinstall-no-usb.md) carries the installer
+> on an on-disk partition instead. Everything else below is unchanged.
+
 | You need | For |
 | --- | --- |
 | **Installer stick**, 8 GB+ | The generic installer ISO. Erased when written; reusable for every machine. |
