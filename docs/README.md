@@ -1,6 +1,8 @@
 # Start here
 
-Read in this order. Each page links to the next level of detail.
+**Just want to install and use the machine? → [GETTING_STARTED.md](GETTING_STARTED.md).**
+
+The rest, in reading order. Each page links to the next level of detail.
 
 1. **[../README.md](../README.md)**: what this image is and how it differs
    from its base.
@@ -15,6 +17,7 @@ Read in this order. Each page links to the next level of detail.
    file, service change, Flatpak and recipe this repository adds, and every
    piece of state a machine creates. On a machine: `ujust provenance <path>`.
 6. **[runbooks/](runbooks/)**: doing things. [reinstall](runbooks/reinstall.md),
+   [reinstall without a USB stick](runbooks/reinstall-no-usb.md),
    [machine-defaults](runbooks/machine-defaults.md), [first-boot](runbooks/first-boot.md),
    [home-backup](runbooks/home-backup.md), [upgrade](runbooks/upgrade.md),
    [recover](runbooks/recover.md).
@@ -27,6 +30,8 @@ and [0024](decisions/0024-dotfiles-apply-themselves.md) how it applies itself at
 
 - A new file, package, service change, Flatpak or recipe needs a row in
   PROVENANCE.md. `tests/contract/daily-driver_test.bats` fails without it.
-- A new choice with alternatives needs a decision record. Supersede old ones
-  instead of editing their history.
+- A genuinely load-bearing choice gets a decision record; most changes don't
+  need one. Supersede old records instead of editing their history.
 - Anything marked **[VERIFY]** hasn't been proven on a real machine yet.
+
+Planned structural work is in [WAVE2-followup.md](WAVE2-followup.md).

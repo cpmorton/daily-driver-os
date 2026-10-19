@@ -16,6 +16,20 @@ architecture, decision records, and a provenance inventory of everything on
 the machine. On a running machine, `ujust provenance <path>` says where any
 file came from.
 
+## Getting started
+
+Full on-ramp: **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**. In short:
+
+1. **Image it from Windows** (the laptop dual-boots beside Windows; no Linux
+   needed to install). Build the installer ISO in CI, then either write a USB
+   stick or use the stickless [on-disk installer](docs/runbooks/reinstall-no-usb.md).
+2. **First boot** asks for the disk passphrase, hostname, localadmin password,
+   disk-unlock method and daily users — all at the console.
+3. **Daily driving** is a bootc loop: `sudo bootc upgrade` / `rollback` (uupd
+   also updates on its own), and roll back from the GRUB menu if a boot goes
+   bad. Install GUI apps with Flatpak and CLI tools with Homebrew; bake
+   anything system-wide into the image itself.
+
 ## What makes this raptor different
 
 Based on `quay.io/fedora-ostree-desktops/silverblue:44` plus

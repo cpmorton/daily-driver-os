@@ -40,8 +40,9 @@ the way they are; check there before "fixing" something deliberate.
 
 - Every file, package, service change, Flatpak or recipe you add gets a row in
   `docs/PROVENANCE.md`; the contract test fails otherwise.
-- Every choice with real alternatives gets a record in `docs/decisions/`, and
-  a line in its index. Supersede, don't rewrite.
+- Write a decision record in `docs/decisions/` only for a genuinely
+  load-bearing choice; most changes need none. Existing records are history —
+  supersede, don't rewrite. `decisions/README.md` indexes them.
 - Mark anything not proven on a real machine **[VERIFY]**.
 
 ## Before committing
