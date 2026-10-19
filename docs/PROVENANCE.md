@@ -74,6 +74,8 @@ Everything under `custom/files/` lands at the same path in the image.
 | `/usr/lib/systemd/system/brew-setup.service.d/10-var-home.conf` | Unpack Homebrew only after `/var/home` is mounted (a no-op unless it's a separate mount) | [0011](decisions/0011-homebrew-single-owner.md) |
 | `/usr/lib/systemd/system/localadmin-home.service` | Creates localadmin's home from `/etc/skel` | [0005](decisions/0005-accounts-and-access.md) |
 | `/usr/lib/systemd/user/vscode-devcontainers-ext.service` | Installs the Dev Containers extension once per user | [0007](decisions/0007-developer-experience-baked-in.md) |
+| `/usr/lib/systemd/user/daily-driver-dotfiles.service` | Applies or updates the user's dotfiles at every login | [0024](decisions/0024-dotfiles-apply-themselves.md) |
+| `/usr/lib/systemd/user/daily-driver-dotfiles.timer` | Updates the user's dotfiles daily | [0024](decisions/0024-dotfiles-apply-themselves.md) |
 | `/usr/lib/sysusers.d/50-localadmin.conf` | Creates localadmin (UID 1000) in `wheel` | [0005](decisions/0005-accounts-and-access.md), [0018](decisions/0018-provisioning-seed-stick.md) |
 | `/usr/lib/dracut/dracut.conf.d/50-daily-driver-unlock.conf` | Adds dracut's `tpm2-tss` and `fido2` modules to the initramfs the build regenerates | [0021](decisions/0021-encrypted-root.md) |
 | `/usr/lib/systemd/system/daily-driver-defaults.service` | First boot: reads the machine defaults from the EFI partition | [0020](decisions/0020-machine-defaults-on-the-esp.md) |
@@ -82,7 +84,8 @@ Everything under `custom/files/` lands at the same path in the image.
 | `/usr/libexec/daily-driver/defaults-import` | Finds `EFI/daily-driver/defaults.json`, validates it, keeps allowlisted fields in RAM, writes extra Flatpaks' preinstall file | [0020](decisions/0020-machine-defaults-on-the-esp.md) |
 | `/usr/libexec/daily-driver/firstboot` | The tty1 first-boot steps, each offering the defaults; resumable | [0020](decisions/0020-machine-defaults-on-the-esp.md) |
 | `/usr/libexec/daily-driver/disk-unlock` | Enrolls TPM2, TPM2 + PIN or FIDO2 keys and a recovery key with `systemd-cryptenroll` | [0021](decisions/0021-encrypted-root.md) |
-| `/usr/libexec/daily-driver/first-users` | Creates (or skips, for a restore) each default user, or users typed in; every password typed | [0020](decisions/0020-machine-defaults-on-the-esp.md), [0019](decisions/0019-no-seeded-passwords.md) |
+| `/usr/libexec/daily-driver/first-users` | Creates (or skips, for a restore) each default user, or users typed in; every password typed; notes each user's dotfiles repository | [0020](decisions/0020-machine-defaults-on-the-esp.md), [0019](decisions/0019-no-seeded-passwords.md), [0024](decisions/0024-dotfiles-apply-themselves.md) |
+| `/usr/libexec/daily-driver/dotfiles-sync` | As the user, with no terminal: first `chezmoi init --apply`, then `chezmoi update` that never overwrites local edits; notifies when it needs a person | [0024](decisions/0024-dotfiles-apply-themselves.md) |
 | `/usr/libexec/daily-driver/home-backup` | Copies a logged-out user's encrypted home image, compressed, plus homed's public key | [0022](decisions/0022-home-backup-and-restore.md) |
 | `/usr/libexec/daily-driver/home-restore` | Puts a backed-up home back, trusts the old key, registers it with homed | [0022](decisions/0022-home-backup-and-restore.md) |
 | `/usr/libexec/daily-driver/localadmin-needs-password` | Lets first boot set localadmin's password only while it's locked | [0019](decisions/0019-no-seeded-passwords.md) |
@@ -113,6 +116,7 @@ Not files in `custom/`, so easy to miss.
 | `podman.service`, `podman-restart.service`, `podman-auto-update.service`, `podman-auto-update.timer` | masked | 70 | [0006](decisions/0006-rootless-podman-only.md) |
 | `podman.socket` (user, every account) | enabled globally | 70 | [0006](decisions/0006-rootless-podman-only.md) |
 | `vscode-devcontainers-ext.service` (user) | enabled globally | 70 | [0007](decisions/0007-developer-experience-baked-in.md) |
+| `daily-driver-dotfiles.service`, `daily-driver-dotfiles.timer` (user) | enabled globally | 70 | [0024](decisions/0024-dotfiles-apply-themselves.md) |
 | `daily-driver-defaults.service` | enabled | 70 | [0020](decisions/0020-machine-defaults-on-the-esp.md) |
 | `daily-driver-firstboot.service` | enabled | 70 | [0020](decisions/0020-machine-defaults-on-the-esp.md) |
 | `systemd-homed-firstboot.service` | masked: replaced by `daily-driver-firstboot.service` | 70 | [0018](decisions/0018-provisioning-seed-stick.md) |
@@ -152,10 +156,10 @@ and `uupd-resume.timer` enabled; user units `brew-preinstall.service` and
 
 | Recipe | Does | Why |
 | --- | --- | --- |
-| `homed-user` | Creates a LUKS homed user with subordinate IDs | [0017](decisions/0017-dual-boot-internal-disk.md) |
+| `homed-user` | Creates a LUKS homed user with subordinate IDs, and optionally names their dotfiles repository | [0017](decisions/0017-dual-boot-internal-disk.md), [0024](decisions/0024-dotfiles-apply-themselves.md) |
 | `brew-owner` | Hands the Homebrew prefix and timers to one user (default owner: localadmin) | [0011](decisions/0011-homebrew-single-owner.md) |
 | `windows-entry` | Re-detects Windows and rewrites its boot menu entry | [0017](decisions/0017-dual-boot-internal-disk.md) |
-| `dotfiles` | Applies the dotfiles repository with chezmoi | [0003](decisions/0003-two-repositories.md) |
+| `dotfiles` | Applies or updates your dotfiles interactively, when the automatic run needs an answer | [0003](decisions/0003-two-repositories.md), [0024](decisions/0024-dotfiles-apply-themselves.md) |
 | `etc-drift` | Lists `/etc` files that no longer follow the image | [0003](decisions/0003-two-repositories.md) |
 | `provenance` | Explains where one path came from | This page |
 | `backup-home` | Backs up a logged-out user's encrypted home to a folder | [0022](decisions/0022-home-backup-and-restore.md) |
@@ -208,6 +212,7 @@ Linux partition.
 | Subordinate IDs | `ensure-subids` | `/etc/subuid`, `/etc/subgid` |
 | Windows boot entry | `windows-boot-entry.service` | `/boot/grub2/custom.cfg` |
 | First-boot markers | `firstboot` | `/var/lib/daily-driver/` |
+| Each user's dotfiles repository (name only) | `first-users`, `ujust homed-user` | `/var/lib/daily-driver/dotfiles/<user>` |
 | Homebrew and its packages | `brew-setup.service`, then its owner | `/var/home/linuxbrew` (owner: localadmin unless `ujust brew-owner`) |
 | Flatpaks | `flatpak-preinstall.service` | `/var/lib/flatpak` |
-| Dev Containers extension, git identity, GitHub token, Claude Code sign-in | first login, the dotfiles, `claude` | inside each encrypted home |
+| Dev Containers extension, dotfiles (git identity), GitHub token, Claude Code sign-in | first login, `dotfiles-sync`, `claude` | inside each encrypted home |

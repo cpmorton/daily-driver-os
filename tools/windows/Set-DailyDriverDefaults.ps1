@@ -10,7 +10,8 @@
 
     hostname, localadmin's password hash, how the encrypted disk unlocks
     (tpm2, tpm2-pin, fido2, passphrase), the daily users (name, full name,
-    UID, shell, home size, must-change-password), extra Flatpaks.
+    UID, shell, home size, must-change-password, dotfiles repository), extra
+    Flatpaks.
 
   Never any user's password: each is typed at first boot. The file holds
   localadmin's password *hash*, readable by anyone who can read this disk, so
@@ -27,6 +28,7 @@
 .EXAMPLE
   # Add or update a daily user; run once per user.
   .\Set-DailyDriverDefaults.ps1 -User chris -RealName 'Chris' -Uid 60101 -Shell /bin/zsh -HomeSizeGB 200
+  .\Set-DailyDriverDefaults.ps1 -User chris -Dotfiles chris-on-github   # applied at their first login
 
 .EXAMPLE
   .\Set-DailyDriverDefaults.ps1 -AddFlatpak org.gnome.Boxes
@@ -67,6 +69,11 @@ param(
     [int] $HomeSizeGB,
     # Someone else types this user's first password; they must change it.
     [switch] $MustChangePassword,
+    # Their chezmoi dotfiles repository, applied at first login: a GitHub user
+    # (meaning <user>/dotfiles), user/repo, or an https URL.
+    [ValidatePattern('^([A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9._-]+)?|https://\S+)$', Options = 'None')]
+    [string] $Dotfiles,
+    [switch] $NoDotfiles,
 
     [ValidatePattern('^[a-z_][a-z0-9_-]{0,31}$', Options = 'None')]
     [string] $RemoveUser,
@@ -231,9 +238,10 @@ $changing = $Hostname -or $SetLocalAdminPassword -or $LocalAdminHash -or $ClearL
     $DiskUnlock -or $User -or $RemoveUser -or $AddFlatpak -or $RemoveFlatpak -or $Delete
 if ($SetLocalAdminPassword -and $LocalAdminHash) { throw 'Use -SetLocalAdminPassword or -LocalAdminHash, not both.' }
 if ($User -eq 'localadmin' -or $RemoveUser -eq 'localadmin') { throw 'localadmin is not a daily user.' }
-if (-not $User -and ($RealName -or $Uid -or $Shell -or $HomeSizeGB -or $MustChangePassword)) {
-    throw '-RealName, -Uid, -Shell, -HomeSizeGB and -MustChangePassword need -User.'
+if (-not $User -and ($RealName -or $Uid -or $Shell -or $HomeSizeGB -or $MustChangePassword -or $Dotfiles -or $NoDotfiles)) {
+    throw '-RealName, -Uid, -Shell, -HomeSizeGB, -MustChangePassword, -Dotfiles and -NoDotfiles need -User.'
 }
+if ($Dotfiles -and $NoDotfiles) { throw 'Use -Dotfiles or -NoDotfiles, not both.' }
 foreach ($id in @($RemoveFlatpak)) {
     if ($id -and $id -cnotmatch '^[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){2,}$') { throw "Not a Flatpak ID: $id" }
 }
@@ -277,7 +285,7 @@ try {
     foreach ($u in @(Get-Prop $old 'users')) {
         if ($null -eq $u) { continue }
         $entry = [ordered]@{ userName = $u.userName }
-        foreach ($k in 'realName', 'uid', 'shell', 'diskSize', 'passwordChangeNow') {
+        foreach ($k in 'realName', 'uid', 'shell', 'diskSize', 'passwordChangeNow', 'dotfiles') {
             $v = Get-Prop $u $k; if ($null -ne $v) { $entry[$k] = $v }
         }
         [void]$users.Add($entry)
@@ -306,6 +314,8 @@ try {
         if ($Shell) { $entry.shell = $Shell }
         if ($HomeSizeGB) { $entry.diskSize = [int64]$HomeSizeGB * 1GB }
         if ($PSBoundParameters.ContainsKey('MustChangePassword')) { $entry.passwordChangeNow = [bool]$MustChangePassword }
+        if ($Dotfiles) { $entry.dotfiles = $Dotfiles }
+        if ($NoDotfiles) { $entry.Remove('dotfiles') }
     }
     foreach ($f in @($AddFlatpak)) { if ($f -and -not $flatpaks.Contains($f)) { [void]$flatpaks.Add($f) } }
     foreach ($f in @($RemoveFlatpak)) { if ($f) { $flatpaks.Remove($f) } }
@@ -336,6 +346,7 @@ try {
             if ($u.Contains('shell')) { $bits += $u.shell }
             if ($u.Contains('diskSize')) { $bits += "$([int64]$u.diskSize / 1GB) GB" }
             if ($u.Contains('passwordChangeNow') -and $u.passwordChangeNow) { $bits += 'must change password' }
+            if ($u.Contains('dotfiles')) { $bits += "dotfiles $($u.dotfiles)" }
             Write-Host "  user:                 $($u.userName)  $($bits -join ', ')"
         }
     } else { Write-Host '  users:                (asked at first boot)' }

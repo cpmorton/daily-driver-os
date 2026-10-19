@@ -5,9 +5,11 @@
 #   - Then, or with no defaults, add users by hand.
 # Every password is typed here, twice: homed derives the home's encryption key
 # from it, so nothing else ever holds it. Every homed user then gets
-# subordinate IDs for rootless podman.
-# See docs/decisions/0020-machine-defaults-on-the-esp.md and
-# docs/decisions/0022-home-backup-and-restore.md.
+# subordinate IDs for rootless podman. A user's dotfiles repository, if any, is
+# noted for their first login to apply.
+# See docs/decisions/0020-machine-defaults-on-the-esp.md,
+# docs/decisions/0022-home-backup-and-restore.md and
+# docs/decisions/0024-dotfiles-apply-themselves.md.
 set -euo pipefail
 
 readonly NAME_RE='^[a-z_][a-z0-9_-]{0,31}$'
@@ -15,6 +17,9 @@ ROOT="${USERS_ROOT:-}" # test seam: prefixes every path this script reads or wri
 LIBEXEC="${LIBEXEC:-/usr/libexec/daily-driver}"
 readonly DEFAULTS="${ROOT}/run/daily-driver/defaults.json"
 readonly SHELLS="${SHELLS_FILE:-/etc/shells}"
+readonly DOTFILES_DIR="${ROOT}/var/lib/daily-driver/dotfiles"
+# Same rule as dotfiles-sync and defaults-import: a GitHub user, user/repo, or an https URL.
+readonly REPO_RE='^([A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9._-]+)?|https://[^[:space:]]+)$'
 
 # Prints "yes" when someone other than the user is typing the password, so the
 # user must replace it at first login. $2 is the default ("yes" or "no").
@@ -48,6 +53,16 @@ create() {
 
 exists() { homectl inspect "$1" >/dev/null 2>&1; }
 
+# Note $1's dotfiles repository ($2) for dotfiles-sync at their first login.
+# A repository name is public: readable by everyone, writable by root.
+set_dotfiles() {
+	[[ -n "$2" ]] || return 0
+	mkdir -p "${DOTFILES_DIR}"
+	printf '%s\n' "$2" >"${DOTFILES_DIR}/$1"
+	chmod 0644 "${DOTFILES_DIR}/$1"
+	echo "${1}'s dotfiles (${2}) apply at their first login."
+}
+
 echo
 echo "=== Daily user accounts ==="
 echo "Each account's home is encrypted with its own password; localadmin can't open it."
@@ -63,8 +78,9 @@ if [[ -f "${DEFAULTS}" ]]; then
 		uid="$(jq -r '.uid // empty' <<<"${user}")"
 		shell="$(jq -r '.shell // empty' <<<"${user}")"
 		must_change="$(jq -r 'if .passwordChangeNow then "yes" else "no" end' <<<"${user}")"
+		dotfiles="$(jq -r '.dotfiles // empty' <<<"${user}")"
 		echo
-		echo "--- ${name}: ${real}, ${size} GB home${uid:+, UID ${uid}}${shell:+, ${shell}}"
+		echo "--- ${name}: ${real}, ${size} GB home${uid:+, UID ${uid}}${shell:+, ${shell}}${dotfiles:+, dotfiles ${dotfiles}}"
 		if exists "${name}"; then
 			echo "${name} already exists here."
 			continue
@@ -72,6 +88,8 @@ if [[ -f "${DEFAULTS}" ]]; then
 		read -rp "[C]reate ${name} now, or [s]kip to restore a backed-up home later? " choice
 		if [[ "${choice}" =~ ^[Ss] ]]; then
 			echo "Skipped. Later, as localadmin: ujust restore-home ${name} <backup folder>"
+			# A restored home that predates its dotfiles still gets them.
+			set_dotfiles "${name}" "${dotfiles}"
 			continue
 		fi
 		args=(--real-name="${real}" --storage=luks --disk-size="${size}G")
@@ -85,6 +103,7 @@ if [[ -f "${DEFAULTS}" ]]; then
 		fi
 		args+=(--password-change-now="$(change_at_login "${name}" "${must_change}")")
 		create "${name}" "${args[@]}"
+		set_dotfiles "${name}" "${dotfiles}"
 	done 3< <(jq -c '.users[]?' "${DEFAULTS}")
 fi
 
@@ -112,8 +131,13 @@ while ((more)); do
 		echo "Size must be a whole number of GB, 10 to 4096."
 		continue
 	fi
+	while read -rp "Dotfiles repository: GitHub user or https URL (Enter for none): " dotfiles &&
+		[[ -n "${dotfiles}" && ! "${dotfiles}" =~ ${REPO_RE} ]]; do
+		echo "Not a GitHub user or https URL."
+	done
 	create "${name}" --real-name="${real}" --storage=luks --disk-size="${size}G" \
 		--password-change-now="$(change_at_login "${name}" no)"
+	set_dotfiles "${name}" "${dotfiles}"
 	read -rp "Create another user? [y/N] " again
 	[[ "${again}" =~ ^[Yy] ]] || more=0
 done

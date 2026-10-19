@@ -1,0 +1,61 @@
+#!/usr/bin/bash
+# Keep the user's home in step with their dotfiles repository (chezmoi), with
+# nobody at the keyboard: run by the user's own systemd at every login and
+# daily (daily-driver-dotfiles.service and .timer).
+#   - First time: clone and apply the repository named for this user in
+#     /var/lib/daily-driver/dotfiles/<user> (first boot or `ujust homed-user`
+#     write it). The repository's questions take their defaults.
+#   - After that: chezmoi update. A file changed here since chezmoi last wrote
+#     it stops the update instead of being overwritten.
+# Anything that needs a person ends in one notification: run `ujust dotfiles`.
+# A user with no repository and no earlier apply is left alone.
+# See docs/decisions/0024-dotfiles-apply-themselves.md.
+set -euo pipefail
+
+ROOT="${DOTFILES_ROOT:-}" # test seam: prefixes the system path this script reads
+readonly SEED="${ROOT}/var/lib/daily-driver/dotfiles/${USER}"
+readonly APPLIED="${XDG_STATE_HOME:-${HOME}/.local/state}/daily-driver/dotfiles-applied"
+# A GitHub user (chezmoi expands it to <user>/dotfiles), user/repo, or an https
+# URL. No ssh: nothing at first login holds a key.
+readonly REPO_RE='^([A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9._-]+)?|https://[^[:space:]]+)$'
+
+notify() {
+	echo "dotfiles-sync: $1" >&2
+	# gdbus ships with glib2, so this needs no notify-send package. Timeout 0:
+	# stays until dismissed (and -1 would parse as an option).
+	gdbus call --session --dest org.freedesktop.Notifications \
+		--object-path /org/freedesktop/Notifications \
+		--method org.freedesktop.Notifications.Notify \
+		"Dotfiles" 0 "" "Your dotfiles need you" "$1" '[]' '{}' 0 >/dev/null 2>&1 || true
+}
+
+if [[ -e "${APPLIED}" ]]; then
+	if ! chezmoi update --no-tty --error-on-conflict </dev/null; then
+		notify "They couldn't update on their own. In a terminal: ujust dotfiles"
+		exit 1
+	fi
+	exit 0
+fi
+
+[[ -s "${SEED}" ]] || exit 0
+repo="$(head -n1 "${SEED}")"
+if [[ ! "${repo}" =~ ${REPO_RE} ]]; then
+	notify "${SEED} doesn't name a repository. Ask localadmin, or: ujust dotfiles <github-user>"
+	exit 1
+fi
+
+src="$(chezmoi source-path)"
+fresh=0
+[[ -e "${src}" ]] || fresh=1
+if chezmoi init --apply --no-tty --promptDefaults "${repo}" </dev/null; then
+	mkdir -p "$(dirname "${APPLIED}")"
+	touch "${APPLIED}"
+	exit 0
+fi
+# chezmoi init never pulls into an existing clone, so a first clone left
+# behind by a failed apply would pin today's copy. Start clean next time.
+if ((fresh)); then
+	rm -rf -- "${src}"
+fi
+notify "Applying ${repo} needs an answer. In a terminal: ujust dotfiles"
+exit 1

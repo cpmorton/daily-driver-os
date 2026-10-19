@@ -1,0 +1,12 @@
+[Unit]
+Description=Apply this user's dotfiles repository (chezmoi)
+
+[Service]
+Type=oneshot
+# First login can beat the network. Offline after two minutes: try anyway, and
+# the failure notification says what to run.
+ExecStartPre=-/usr/bin/nm-online -q --timeout=120
+ExecStart=/usr/libexec/daily-driver/dotfiles-sync
+
+[Install]
+WantedBy=default.target

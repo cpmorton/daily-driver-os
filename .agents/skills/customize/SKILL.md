@@ -18,6 +18,7 @@ description: >-
 | A command that configures the system | `custom/ujust/*.just` | available from first login |
 | A system file: unit, preset, tmpfiles.d | `custom/files/` | at build time |
 | Per-user config for new accounts | `custom/config/` | at build time, into `/etc/skel` |
+| Personal per-user config (identity, preferences) | the user's `dotfiles` repository (chezmoi) | at every login and daily, by `dotfiles-sync` |
 
 The dividing line is who decides and when: build time for what the image must
 have, runtime for what the user chooses.
@@ -54,6 +55,23 @@ Recipes in `custom/ujust/`. No `dnf5` or `rpm` — the image is immutable.
 
 `custom/files/` mirrors `/`; `custom/config/` seeds `/etc/skel/.config/`. Each
 directory's README has the semantics.
+
+### Personal, per user
+
+Daily homes are homed LUKS images, locked until their user logs in, so
+`/etc/skel` never reaches them after first boot. Anything personal goes in the
+user's chezmoi repository, which `daily-driver-dotfiles.service` and `.timer`
+apply with no terminal ([decision 0024](../../../docs/decisions/0024-dotfiles-apply-themselves.md)).
+What surprised the last change:
+
+- Every chezmoi prompt needs a default (`promptStringOnce . "k" "q" "default"`):
+  the first apply runs `--promptDefaults` with stdin at `/dev/null`, and a
+  prompt without one fails with `EOF`.
+- `chezmoi init <repo>` never pulls into an existing clone, so a failed first
+  apply must remove its clone or the next login re-applies the stale copy.
+- `chezmoi update --keep-going` still stops at a conflict prompt with no TTY;
+  `--error-on-conflict` (2.71+) fails cleanly and touches nothing.
+- `gdbus call ... Notify` takes a negative timeout as an option: pass `0`.
 
 ## Removing something
 
