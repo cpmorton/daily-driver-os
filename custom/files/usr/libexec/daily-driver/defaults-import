@@ -11,7 +11,8 @@
 #    "localadmin": {"hashedPassword": "$6$..."},        crypt(3) hash, never a password
 #    "diskUnlock": "tpm2" | "tpm2-pin" | "fido2" | "passphrase",
 #    "users": [{"userName": "chris", "realName": "Chris", "uid": 60101,
-#               "shell": "/bin/zsh", "diskSize": <bytes>, "passwordChangeNow": false}],
+#               "shell": "/bin/zsh", "diskSize": <bytes>, "passwordChangeNow": false,
+#               "dotfiles": "<github-user> | <user>/<repo> | https://..."}],
 #    "flatpaks": ["org.example.App"]}
 #
 # The file is rebuilt from that allowlist; anything else is logged and dropped,
@@ -112,6 +113,9 @@ problem="$(jq -r '
 	        then "users[\(.userName)].diskSize: bytes, 10 to 4096 GiB"
 	      elif has("passwordChangeNow") and (.passwordChangeNow | type != "boolean")
 	        then "users[\(.userName)].passwordChangeNow: true or false"
+	      elif has("dotfiles") and (.dotfiles | type == "string"
+	          and test("^([A-Za-z0-9][A-Za-z0-9-]*(/[A-Za-z0-9._-]+)?|https://[^\\s]+)$") | not)
+	        then "users[\(.userName)].dotfiles: a GitHub user, user/repo, or an https URL"
 	      else empty end),
 	  ((.users // [] | if type == "array" then . else [] end) | map(.userName?) | group_by(.)[]
 	    | select(length > 1) | "users: \(.[0]) appears twice"),
@@ -127,7 +131,7 @@ problem="$(jq -r '
 ignored="$(jq -r '
 	[(keys - ["version", "hostname", "localadmin", "diskUnlock", "users", "flatpaks"])[],
 	 ((.localadmin // {}) | keys - ["hashedPassword"] | .[] | "localadmin.\(.)"),
-	 ((.users // [])[] | . as $u | keys - ["userName", "realName", "uid", "shell", "diskSize", "passwordChangeNow"]
+	 ((.users // [])[] | . as $u | keys - ["userName", "realName", "uid", "shell", "diskSize", "passwordChangeNow", "dotfiles"]
 	   | .[] | "users[\($u.userName)].\(.)")] | join(", ")' "${staged}")"
 [[ -z "${ignored}" ]] || log "ignoring ${ignored}"
 
@@ -143,7 +147,8 @@ mkdir -p "${OUT_DIR}"
 		+ (if has("uid") then {uid} else {} end)
 		+ (if has("shell") then {shell} else {} end)
 		+ (if has("diskSize") then {diskSize} else {} end)
-		+ (if has("passwordChangeNow") then {passwordChangeNow} else {} end)]}
+		+ (if has("passwordChangeNow") then {passwordChangeNow} else {} end)
+		+ (if has("dotfiles") then {dotfiles} else {} end)]}
 	+ {flatpaks: (.flatpaks // [])}' "${staged}" >"${OUT}")
 
 mapfile -t flatpaks < <(jq -r '.flatpaks[]' "${OUT}")

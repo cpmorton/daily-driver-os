@@ -66,7 +66,8 @@ alongside upstream's `default.preinstall`.
 - `/tmp` is tmpfs (asserted at build time).
 - `DOCKER_HOST` points every app at the user's rootless podman socket.
 - Git defaults and GitHub credentials through gh are system-wide
-  (`/etc/gitconfig`); the dotfiles only add your name and email.
+  (`/etc/gitconfig`); the dotfiles only add your name and email, and apply
+  themselves at login.
 - The image rebuilds nightly, so baked-in RPMs pick up upstream releases.
 
 ## Set up a machine

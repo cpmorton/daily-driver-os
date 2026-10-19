@@ -156,6 +156,8 @@ systemctl mask \
 	podman-auto-update.timer
 systemctl --global enable podman.socket
 systemctl --global enable vscode-devcontainers-ext.service
+# Each user's dotfiles apply at login and update daily (decision 0024).
+systemctl --global enable daily-driver-dotfiles.service daily-driver-dotfiles.timer
 
 systemctl enable systemd-homed.service
 
@@ -252,7 +254,7 @@ git config --system --get init.defaultBranch
 grep -qP '^/etc/gitconfig\tthis repository' "${MANIFEST}"
 grep -qP '^/usr/lib/systemd/system/brew-setup.service\tublue-os/brew$' "${MANIFEST}"
 test -x /usr/sbin/mkhomedir_helper
-for helper in defaults-import disk-unlock ensure-subids firstboot first-users home-backup \
+for helper in defaults-import disk-unlock dotfiles-sync ensure-subids firstboot first-users home-backup \
 	home-restore localadmin-needs-password windows-boot-entry; do
 	test -x "/usr/libexec/daily-driver/${helper}"
 done
