@@ -2,7 +2,9 @@ name: Renovate
 
 on:
   schedule:
-    - cron: "0 */6 * * *"
+    # Weekly (Mon 14:00 UTC). Throttled from every-6h to cut PR churn while
+    # keeping supply-chain/dependency updates flowing; dispatch for an ad-hoc run.
+    - cron: "0 14 * * 1"
   workflow_dispatch:
   push:
     branches:

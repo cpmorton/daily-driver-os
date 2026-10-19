@@ -8,7 +8,7 @@ name: Build and Push Image
 # promote-main-to-stable.yml opens the scheduled/manual main -> stable promotion
 # PR. execute-release.yml runs the release gate and promotes the candidate.
 #
-# Builds run on push to main and nightly; PR builds are disabled. A change to a
+# Builds run on push to main and once daily; PR builds are disabled. A change to a
 # workflow the build depends on — build-image, promote, unit tests — still
 # builds, so a break in it is caught. The four validate workflows are PR
 # linting only and never affect the image.
@@ -19,11 +19,12 @@ on:
     paths-ignore:
       - "**.md"
       - ".github/workflows/*validate*.yml"
-  # Nightly rebuild. Chrome, VS Code and claude-code are baked-in RPMs: without
-  # a rebuild they only update when a commit lands. 02:17 UTC runs ahead of
-  # promote-main-to-stable.yml (04:00 UTC), so the promotion takes a fresh build.
+  # Daily rebuild. Chrome, VS Code and claude-code are baked-in RPMs: without a
+  # rebuild they only update when a commit lands. 14:00 UTC is ~10:00 America/
+  # New_York in summer (EDT) and ~09:00 in winter (EST) — cron is UTC, so the
+  # wall-clock time shifts an hour across US DST.
   schedule:
-    - cron: "17 2 * * *"
+    - cron: "0 14 * * *"
   workflow_dispatch:
 
 permissions:

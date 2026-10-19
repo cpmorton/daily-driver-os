@@ -3,8 +3,8 @@ name: Promote main to stable
 
 # Two-branch model: `main` is the testing branch (publishes :stable-testing and
 # :testing); `stable` is the production branch. The shared factory workflow
-# opens (or refreshes) a squash promotion PR from `main` to `stable` daily, or
-# when a maintainer dispatches it. Merging that PR triggers digest promotion in
+# opens (or refreshes) a squash promotion PR from `main` to `stable` when a
+# maintainer dispatches it. Merging that PR triggers digest promotion in
 # execute-release.yml; it does not rebuild `:stable`.
 #
 # Reusable logic lives in projectbluefin/actions — this is a thin caller,
@@ -13,9 +13,9 @@ name: Promote main to stable
 # org-maintained, and shared with the other image repos (see issues #235/#237).
 
 on:
-  schedule:
-    # Default daily promotion window. Fork owners may change this cadence.
-    - cron: "0 4 * * *"
+  # On-demand only. The daily auto-promotion PR was removed to stop the
+  # once-a-day promotion-PR notification; dispatch this when you want to cut
+  # main -> stable. The two-branch model is otherwise unchanged.
   workflow_dispatch:
 
 permissions:
