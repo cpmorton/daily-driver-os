@@ -56,10 +56,10 @@ jobs:
     # branch so it cannot bypass the candidate-digest release path by rebuilding
     # and publishing from stable.
     if: github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
-    # Pinned to 24.04: projectbluefin/actions' setup-runner hard-asserts
-    # `ubuntu-24.04` when adding its resolute apt source, so a 26.04 runner
-    # fails that step. Renovate is held below 26.04 in renovate.json too.
-    runs-on: ubuntu-24.04
+    # 26.04 ships Podman 5.x, so setup-runner skips the resolute apt install
+    # and its apt cache, which on 24.04 never saves: tar runs as the runner
+    # user and cannot read apt's root-only lock and partial/. [VERIFY]
+    runs-on: ubuntu-26.04
     timeout-minutes: 360
     permissions:
       contents: read
