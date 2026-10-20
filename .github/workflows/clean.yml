@@ -20,12 +20,13 @@ jobs:
       - name: Resolve package name
         id: package
         shell: bash
+        env:
+          NAME: ${{ github.event.repository.name }}
         run: |
           # Derive the cleanup target from the repository name (lowercased),
           # exactly as build-image.yml derives the publish target, so a renamed
           # fork cleans the package it actually pushes.
-          name="${{ github.event.repository.name }}"
-          echo "name=${name,,}" >> "${GITHUB_OUTPUT}"
+          echo "name=${NAME,,}" >> "${GITHUB_OUTPUT}"
 
       - name: Cleanup old images
         uses: projectbluefin/actions/bootc-build/ghcr-cleanup@59f783ed76fd9d449ef6887a6649446801bd5434 # v1
