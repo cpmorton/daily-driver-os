@@ -20,7 +20,7 @@ supersede a record with a new one and mark the old one's status.
 | 0011 | [Keep Homebrew, owned by one user](0011-homebrew-single-owner.md) | Accepted, amended by 0018 |
 | 0012 | [Claude: the CLI in the image, the rest on claude.ai](0012-claude.md) | Accepted |
 | 0013 | [Image signing: keyless in CI, not yet enforced on the machine](0013-image-signing.md) | Accepted, known gap |
-| 0014 | [Nightly builds and finpilot's two-channel release](0014-nightly-builds-and-release-channels.md) | Accepted |
+| 0014 | [Nightly builds and finpilot's two-channel release](0014-nightly-builds-and-release-channels.md) | Superseded by 0025 |
 | 0015 | [Leave upstream files alone; override from this image's phases](0015-leave-upstream-files-alone.md) | Accepted |
 | 0016 | [The installer ISO is built in CI; nobody needs Linux to install](0016-installer-built-in-ci.md) | Accepted, amended by 0017 |
 | 0017 | [Dual boot on the internal disk, beside Windows](0017-dual-boot-internal-disk.md) | Accepted, amended by 0021 |
@@ -29,8 +29,9 @@ supersede a record with a new one and mark the old one's status.
 | 0020 | [Machine defaults live on the EFI partition, written from Windows](0020-machine-defaults-on-the-esp.md) | Accepted |
 | 0021 | [The Linux root is encrypted; it unlocks by TPM2, security key or passphrase](0021-encrypted-root.md) | Accepted |
 | 0022 | [Back up and restore a user's whole encrypted home as one file](0022-home-backup-and-restore.md) | Accepted |
-| 0023 | [Stable releases carry a placeholder SBOM, not an inline Syft scan](0023-release-without-inline-sbom.md) | Accepted |
+| 0023 | [Stable releases carry a placeholder SBOM, not an inline Syft scan](0023-release-without-inline-sbom.md) | Superseded by 0025 |
 | 0024 | [Dotfiles apply themselves at login and stay current](0024-dotfiles-apply-themselves.md) | Accepted |
+| 0025 | [Trunk-based releases: promote a signed digest, record it as a tag](0025-trunk-based-releases.md) | Accepted |
 
 ## Template
 

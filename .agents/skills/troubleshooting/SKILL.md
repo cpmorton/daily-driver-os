@@ -34,8 +34,8 @@ CI runs the same checks; running them locally only makes the pull request quiet.
 |---|---|---|
 | `validate` never runs | branch protection names a check no workflow produces | the context must be exactly `validate` |
 | Renovate opens nothing | `RENOVATE_TOKEN` is missing or lacks the `workflow` scope | recreate the token |
-| the promotion PR never opens | `stable` does not exist | create the branch |
-| the promotion PR will not merge | `stable` requires an approval | set required approvals to 0 |
+| Release fails at "Verify the candidate's signature" | the build's signing step failed (it is `continue-on-error`) | fix signing, rebuild `main`, release again; `:stable` did not move |
+| Release fails at "Resolve the candidate" | the image has no version or revision label, e.g. built from a dirty tree | release a CI build of `main` |
 | a Renovate PR waits forever | auto-merge is off | enable it in Settings |
 
 ## Runtime

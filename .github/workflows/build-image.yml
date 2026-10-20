@@ -1,17 +1,14 @@
 ---
 name: Build and Push Image
 
-# Two-branch model:
-#   main   = testing branch, publishes :stable-testing and :testing
-#   stable = production branch, receives the exact signed/testing digest through
-#            execute-release.yml; it never rebuilds an image.
-# promote-main-to-stable.yml opens the scheduled/manual main -> stable promotion
-# PR. execute-release.yml runs the release gate and promotes the candidate.
+# Trunk-based releases (decision 0025): every build here is a candidate from
+# main and publishes :stable-testing. release.yml promotes the exact signed
+# digest to :stable when a maintainer dispatches it; :stable is never rebuilt.
 #
 # Builds run on push to main and once daily; PR builds are disabled. A change to a
-# workflow the build depends on — build-image, promote, unit tests — still
-# builds, so a break in it is caught. The four validate workflows are PR
-# linting only and never affect the image.
+# workflow the build depends on — build-image, release, unit tests — still
+# builds, so a break in it is caught. pr-validation.yml is PR linting only and
+# never affects the image.
 on:
   push:
     branches:
@@ -41,7 +38,9 @@ env:
   # local builds agree. Set IMAGE_DESC, IMAGE_KEYWORDS, IMAGE_LOGO_URL or
   # IMAGE_REF here only to override the Containerfile deliberately.
   DEFAULT_TAG: "stable"
-  PRODUCTION_BRANCH: "stable" # The branch that publishes :stable production images
+  # No branch publishes :stable since decision 0025, so every build is a
+  # :stable-testing candidate; release.yml is the only path to :stable.
+  PRODUCTION_BRANCH: "stable"
   REGISTRY_CACHE_WRITE: "1" # CI always writes the layer cache; local builds stay read-only
   ENABLE_RECHUNKING: "false"
   RECHUNK_MAX_LAYERS: "128"
@@ -158,10 +157,8 @@ jobs:
 
       # generate-tags emits stream-native tags (testing* or stable-daily* plus
       # version aliases). For testing builds this renames testing* tags to
-      # stable-testing-*, keeps the bare :testing tag (the factory release
-      # gate in reusable-promote-squash.yml resolves digests from it), and
-      # guarantees the mutable consumer tag (:stable / :stable-testing) is
-      # always published.
+      # stable-testing-* and guarantees the mutable consumer tag
+      # (:stable-testing) is always published.
       - name: Finalize branch tags
         id: branch-tags
         shell: bash
@@ -182,8 +179,6 @@ jobs:
 
           for tag in "${generated_tags[@]}"; do
             if [[ "${TAG_STREAM}" == "testing" ]]; then
-              # Bare :testing stays so the promotion release gate can resolve it.
-              [[ "${tag}" == "testing" ]] && add_tag "${tag}"
               add_tag "${tag/testing/stable-testing}"
             else
               add_tag "${tag}"
@@ -223,9 +218,9 @@ jobs:
                           "${ALIAS_TAGS}"
 
       # Every build here is a candidate build from main and publishes tags.
-      # execute-release.yml promotes the signed, gated candidate digest to
-      # :stable without a stable-branch rebuild, so the upstream push-image
-      # action owns all registry authentication and pushing.
+      # release.yml promotes the signed candidate digest to :stable without a
+      # rebuild, so the upstream push-image action owns all registry
+      # authentication and pushing.
 
       - name: Push to GHCR
         id: push
@@ -239,8 +234,8 @@ jobs:
       # Sign and attest (SLSA Build L2 provenance)
       # Bluefin pattern: keyless OIDC signing via Fulcio.
       # Requires 'id-token: write' permission (granted above).
-      # Signing failures do not block candidate publication, but the release
-      # gate rejects an unsigned candidate and preserves the prior :stable.
+      # Signing failures do not block candidate publication, but release.yml
+      # refuses an unsigned candidate and leaves the prior :stable in place.
 
       - name: Sign and publish
         continue-on-error: true

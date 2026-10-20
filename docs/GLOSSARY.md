@@ -110,8 +110,9 @@ upstream source on 2026-09-23; the ecosystem moves fast, so the
   and on a laptop waits for AC power.
 
 **`:stable`, `:stable-testing`**
-: Image tags. `main` builds `:stable-testing`; the release gate promotes that
-  exact digest to `:stable`. [decision 0014](decisions/0014-nightly-builds-and-release-channels.md)
+: Image tags. `main` builds `:stable-testing`; the Release workflow promotes
+  that exact digest to `:stable` and to a `:<version>` tag.
+  [decision 0025](decisions/0025-trunk-based-releases.md)
 
 **Flatpak, Flathub, preinstall**
 : Sandboxed GUI apps from the Flathub remote. `*.preinstall` files declare

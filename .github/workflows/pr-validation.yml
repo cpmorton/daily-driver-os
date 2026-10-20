@@ -1,10 +1,13 @@
 name: PR Validation
 
+# Every pull-request linter in one workflow, so a PR reports one run. `validate`
+# (shellcheck and hadolint) always runs and is the required check. The others
+# run only when a PR touches what they check, and a skipped job counts as
+# passing. A change to this file runs all of them.
 on:
   pull_request:
     branches:
       - main
-      - stable
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
@@ -17,36 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      # The promotion check below reads refs and commits through the API.
       contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      # The promotion branch is built by the factory reusable, which stages
-      # deletions with `git diff --diff-filter=D`. Git reports a moved file as a
-      # rename, so paths main moved survive on their old paths and the branch's
-      # tree stops matching main's. execute-release.yml's tree guard refuses such
-      # a release after the merge; fail it here instead, while it is still a PR.
-      - name: Verify the promotion matches main
-        if: github.head_ref == 'auto/promote-main-to-stable'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          head_tree=$(gh api \
-            "repos/${{ github.repository }}/git/commits/${{ github.event.pull_request.head.sha }}" \
-            --jq '.tree.sha')
-          main_sha=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
-          main_tree=$(gh api "repos/${{ github.repository }}/git/commits/${main_sha}" --jq '.tree.sha')
-
-          if [ "${head_tree}" != "${main_tree}" ]; then
-            echo "::error::The promotion PR's tree does not match main's. Re-run promote-main-to-stable.yml to refresh the promotion branch."
-            exit 1
-          fi
-          echo "The promotion tree matches main."
 
       # The repository's shell scripts are the *.sh files git tracks — the same
       # definition `just lint` uses. validate-pr word-splits this input into
@@ -65,3 +42,140 @@ jobs:
           shellcheck-glob: ${{ steps.shell-scope.outputs.glob }}
           dockerfile: "Containerfile"
           hadolint-config: ".github/hadolint.yaml"
+
+  # Path filtering is plain git rather than a third-party action: the PR's own
+  # diff against its merge base, matched per linter.
+  changes:
+    name: Detect what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      brewfiles: ${{ steps.diff.outputs.brewfiles }}
+      flatpaks: ${{ steps.diff.outputs.flatpaks }}
+      justfiles: ${{ steps.diff.outputs.justfiles }}
+      renovate: ${{ steps.diff.outputs.renovate }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Match changed paths
+        id: diff
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          changed=$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")
+          self='^\.github/workflows/pr-validation\.yml$'
+          match() {
+            if grep -qE -e "$1" -e "${self}" <<<"${changed}"; then echo true; else echo false; fi
+          }
+          {
+            echo "brewfiles=$(match '^(custom/brew/|build/validate-brewfiles\.sh$|tests/contract/validate-brewfiles_test\.bats$)')"
+            echo "flatpaks=$(match '^(custom/flatpaks/|build/validate-flatpaks\.sh$|tests/contract/validate-flatpaks_test\.bats$)')"
+            echo "justfiles=$(match '(\.just$|^Justfile$)')"
+            echo "renovate=$(match '^\.github/(renovate\.json|workflows/renovate\.yml)$')"
+          } | tee -a "${GITHUB_OUTPUT}"
+
+  brewfiles:
+    name: Brewfiles
+    needs: changes
+    if: needs.changes.outputs.brewfiles == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@4790763c0a3ba4036f72634dc079c4a7dfcd4878 # main
+
+      - name: Install just
+        env:
+          # renovate: datasource=github-releases depName=casey/just
+          JUST_VERSION: "1.59.0"
+        run: |
+          set -euo pipefail
+          base="https://github.com/casey/just/releases/download/${JUST_VERSION}"
+          asset="just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          curl -sSfL -o "${asset}" "${base}/${asset}"
+          curl -sSfL -o SHA256SUMS "${base}/SHA256SUMS"
+          grep -F "${asset}" SHA256SUMS | sha256sum -c -
+          tar xzf "${asset}" -C /tmp just
+          sudo install -m 0755 /tmp/just /usr/local/bin/just
+          just --version
+
+      # Static validation only: the recipe greps Brewfiles and passes names
+      # to `brew info` as data. Never `brew bundle check` a PR-controlled
+      # Brewfile — it is a Ruby DSL and would execute in CI.
+      - name: Validate Brewfiles
+        shell: bash
+        run: just validate-brewfiles
+
+  flatpaks:
+    name: Flatpaks
+    needs: changes
+    if: needs.changes.outputs.flatpaks == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # The script adds the Flathub remote itself, --user and --if-not-exists,
+      # so only the binary is needed here. Refresh the apt lists first: the
+      # runner image bakes them at image build time, so once a package rotates
+      # off the mirror they name a version that is gone and the install 404s.
+      - name: Install flatpak
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak
+
+      # Single implementation of the validation contract, shared with
+      # `just validate-flatpaks`. The path filter includes the script and its
+      # test so a change to the contract runs the check that enforces it.
+      - name: Validate Flatpaks
+        shell: bash
+        run: build/validate-flatpaks.sh
+
+  justfiles:
+    name: Justfiles
+    needs: changes
+    if: needs.changes.outputs.justfiles == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Install just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+
+      # `just check` is the single definition of this contract: it covers the
+      # root Justfile and every .just file, so the workflow cannot drift from
+      # what a contributor runs locally.
+      - name: Validate Justfiles
+        shell: bash
+        run: just check
+
+  # Renovate's own run on a push to main also fails loudly on a bad config, so
+  # the PR check is the early warning, not the only one.
+  renovate-config:
+    name: Renovate config
+    needs: changes
+    if: needs.changes.outputs.renovate == 'true'
+    permissions:
+      contents: read
+    uses: projectbluefin/actions/.github/workflows/reusable-validate-renovate.yml@59f783ed76fd9d449ef6887a6649446801bd5434 # v1

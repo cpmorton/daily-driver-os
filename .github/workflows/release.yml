@@ -1,0 +1,161 @@
+---
+name: Release
+
+# Trunk-based release (decision 0025). `main` builds and signs :stable-testing;
+# a release promotes that exact digest to :stable and never rebuilds, so what
+# ships is byte-for-byte what was tested. The release is recorded as a git tag
+# and a GitHub Release named after the image's own version label, which is also
+# pushed as an immutable image tag a machine can pin to.
+#
+# Dispatch it when a :stable-testing build has earned it. Naming an earlier
+# version instead re-promotes that release, which is how :stable rolls back.
+# A schedule here would make releases automatic; that is a deliberate later
+# choice, not a default.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Roll :stable back to this earlier release (e.g. 46.20261019). Leave empty to release the current :stable-testing."
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Promote a signed build to :stable
+    # A dispatch may select any ref; only the default branch releases, the same
+    # guard build-image.yml uses.
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # git tag and GitHub Release
+      packages: write # new tags in GHCR
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      SOURCE_TAG: ${{ inputs.version || 'stable-testing' }}
+      TARGET_TAG: stable
+      # Scoped to this repository, not the owner: `[^/]+` after the owner
+      # would accept a signature minted by any repository in the org.
+      IDENTITY_REGEXP: ^https://github\.com/${{ github.repository }}/\.github/workflows/
+    steps:
+      - name: Prepare environment
+        shell: bash
+        env:
+          OWNER: ${{ github.repository_owner }}
+          NAME: ${{ github.event.repository.name }}
+        run: echo "IMAGE=ghcr.io/${OWNER,,}/${NAME,,}" >> "${GITHUB_ENV}"
+
+      - name: Log in to GHCR
+        shell: bash
+        run: echo "${GH_TOKEN}" | skopeo login ghcr.io --username "${{ github.actor }}" --password-stdin
+
+      # Resolve the tag exactly once. Every later step works on this digest, so
+      # a build that lands mid-release cannot swap the candidate.
+      - name: Resolve the candidate
+        id: candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          inspect=$(skopeo inspect --no-tags "docker://${IMAGE}:${SOURCE_TAG}")
+          digest=$(jq -r '.Digest' <<<"${inspect}")
+          version=$(jq -r '.Labels["org.opencontainers.image.version"] // empty' <<<"${inspect}")
+          revision=$(jq -r '.Labels["org.opencontainers.image.revision"] // empty' <<<"${inspect}")
+
+          # The Justfile makes the version unique per build (<fedora>.<date>[.N])
+          # and stamps the short commit only from a clean tree, which CI always is.
+          if [[ -z "${version}" || -z "${revision}" ]]; then
+            echo "::error::${IMAGE}:${SOURCE_TAG} has no version or revision label; refusing to release an image that cannot be traced to a commit."
+            exit 1
+          fi
+          sha=$(gh api "repos/${REPO}/commits/${revision}" --jq '.sha')
+
+          echo "Candidate ${IMAGE}@${digest}: version ${version}, commit ${sha}"
+          {
+            echo "digest=${digest}"
+            echo "version=${version}"
+            echo "sha=${sha}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # The gate: an unsigned candidate, or one signed by another repository's
+      # workflow, never reaches :stable.
+      - name: Verify the candidate's signature
+        shell: bash
+        env:
+          DIGEST: ${{ steps.candidate.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cosign verify \
+            --certificate-identity-regexp "${IDENTITY_REGEXP}" \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            "${IMAGE}@${DIGEST}" >/dev/null
+          echo "Signature verified for ${IMAGE}@${DIGEST}"
+
+      # --preserve-digests keeps the manifest byte-identical. Cosign signatures
+      # are stored against the digest, so any re-encoding by skopeo would leave
+      # :stable pointing at an unsigned image. The immutable version tag is
+      # written first and the mutable :stable last. Copying by digest is
+      # idempotent, so a re-run after a partial failure is safe.
+      - name: Promote the digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.candidate.outputs.digest }}
+          VERSION: ${{ steps.candidate.outputs.version }}
+        run: |
+          set -euo pipefail
+          for tag in "${VERSION}" "${TARGET_TAG}"; do
+            echo "Copying ${IMAGE}@${DIGEST} -> :${tag}"
+            skopeo copy --preserve-digests --all "docker://${IMAGE}@${DIGEST}" "docker://${IMAGE}:${tag}"
+          done
+
+      # A rollback, or a re-run, finds the release already recorded.
+      - name: Record the release
+        shell: bash
+        env:
+          DIGEST: ${{ steps.candidate.outputs.digest }}
+          VERSION: ${{ steps.candidate.outputs.version }}
+          SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          if gh release view "v${VERSION}" --repo "${REPO}" >/dev/null 2>&1; then
+            echo "::notice::v${VERSION} is already recorded; :${TARGET_TAG} now points at it again."
+            exit 0
+          fi
+
+          notes=$(mktemp)
+          cat >"${notes}" <<EOF
+          **Image:** \`${IMAGE}@${DIGEST}\`
+
+          Follow releases, or pin this one:
+
+          \`\`\`bash
+          sudo bootc switch ${IMAGE}:${TARGET_TAG}
+          sudo bootc switch ${IMAGE}:${VERSION}
+          \`\`\`
+
+          Verify the signature:
+
+          \`\`\`bash
+          cosign verify \\
+            --certificate-identity-regexp '${IDENTITY_REGEXP}' \\
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \\
+            ${IMAGE}@${DIGEST}
+          \`\`\`
+          EOF
+
+          # --generate-notes appends the merged PRs since the previous release.
+          gh release create "v${VERSION}" \
+            --repo "${REPO}" \
+            --target "${SHA}" \
+            --title "${VERSION}" \
+            --notes-file "${notes}" \
+            --generate-notes

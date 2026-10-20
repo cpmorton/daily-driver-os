@@ -60,17 +60,14 @@ Renovate merges low-risk updates on its own, and it cannot without this.
 
 ## 4. Workflow permissions
 
-Two settings on one screen. The first lets workflows write — push images, open
-pull requests. The second is what lets the promotion workflow approve the check
-runs GitHub holds for its own pull request.
+Let workflows write: push images, tag releases.
 
-- **`gh`** — `gh api -X PUT repos/{owner}/{repo}/actions/permissions/workflow -f default_workflow_permissions=write -f can_approve_pull_request_reviews=true`
+- **`gh`** — `gh api -X PUT repos/{owner}/{repo}/actions/permissions/workflow -f default_workflow_permissions=write`
 - **By hand:**
   1. **Settings → Actions → General**.
   2. Scroll down to **Workflow permissions**.
   3. Select **Read and write permissions**.
-  4. Tick **Allow GitHub Actions to create and approve pull requests**.
-  5. Click **Save**.
+  4. Click **Save**.
 
 ## 5. Create the Renovate token
 
@@ -121,23 +118,7 @@ open pull requests, so it needs to act as you.
   3. Name it exactly **`RENOVATE_TOKEN`**.
   4. Paste the token into **Secret**, then click **Add secret**.
 
-## 6. Create `stable`
-
-Promotion opens a pull request *into* `stable`, so the branch has to exist before
-the first promotion can run. Create it from `main`.
-
-- **`git`** — from a clone: `git push origin main:stable`
-- **`gh`** — `gh api -X POST repos/{owner}/{repo}/git/refs -f ref=refs/heads/stable -f sha="$(gh api repos/{owner}/{repo}/git/ref/heads/main --jq .object.sha)"`
-- **By hand:**
-  1. In your repository, click the branch dropdown in the file list — it reads
-     **main**.
-  2. Click **View all branches**, then **New branch**.
-  3. Name it **`stable`** and set the source to **`main`**.
-  4. Click **Create new branch**.
-
-Never commit to `stable` directly. It only ever receives the promotion.
-
-## 7. Protect `main`
+## 6. Protect `main`
 
 Require the `validate` check, so nothing lands without passing shellcheck and
 hadolint.
@@ -169,67 +150,9 @@ hadolint.
      enforces it.
   7. Click **Create**, or **Save changes**.
 
-## 8. Protect `stable`
+## 7. Create the labels
 
-The same check, and **zero** required approvals so promotion merges the moment
-checks pass.
-
-- **`gh`** — the same call against `stable`, with:
-
-  ```json
-  "required_pull_request_reviews": {"required_approving_review_count": 0}
-  ```
-
-- **By hand:**
-  1. **Settings → Branches → Add branch protection rule**.
-  2. Pattern: `stable`.
-  3. Tick **Require status checks to pass before merging** and select
-     `validate`.
-  4. Tick **Require a pull request before merging**, then set **Required
-     approvals** to **0**. Zero is deliberate — with one or more, every
-     promotion waits for a human.
-  5. Click **Create**.
-
-## 9. Restrict `stable` to squash merges
-
-Promotion is a squash PR, so the branch should accept nothing else.
-
-- **`gh`**:
-
-  ```bash
-  gh api -X POST repos/{owner}/{repo}/rulesets --input - <<'JSON'
-  {
-    "name": "stable — squash-only promotion",
-    "target": "branch",
-    "enforcement": "active",
-    "conditions": {"ref_name": {"include": ["refs/heads/stable"], "exclude": []}},
-    "rules": [{"type": "pull_request", "parameters": {
-      "allowed_merge_methods": ["squash"],
-      "required_approving_review_count": 0,
-      "dismiss_stale_reviews_on_push": false,
-      "require_code_owner_review": false,
-      "require_last_push_approval": false,
-      "required_review_thread_resolution": false
-    }}]
-  }
-  JSON
-  ```
-
-- **By hand:**
-  1. **Settings → Rules → Rulesets**, then **New branch ruleset**.
-  2. **Ruleset name**: `stable — squash-only promotion`.
-  3. **Enforcement status**: **Active**.
-  4. Under **Target branches**, click **Add target**, choose **Include by
-     pattern**, and enter `stable`.
-  5. Tick **Require a pull request before merging**.
-  6. Under **Allowed merge methods**, tick **Squash** and untick the rest.
-  7. Leave **Required approvals** at **0**.
-  8. Click **Create**.
-
-## 10. Create the labels
-
-The release gate applies `release/ready` and `release/blocked`, and the shared
-label workflow uses the lifecycle set. When a label is missing, the step that
+The shared label workflow uses the lifecycle set. When a label is missing, the step that
 applies it fails, and the failure is easy to miss.
 
 - **`gh`** — one call per label:
@@ -237,15 +160,13 @@ applies it fails, and the failure is easy to miss.
   (`--force` updates a label that already exists, so the block is safe to
   re-run.)
 - **By hand** — **Issues → Labels → New label**, then name, colour, and
-  description, one at a time. Twelve labels is tedious; the `gh` route is worth
+  description, one at a time. Ten labels is tedious; the `gh` route is worth
   it here even if you did everything else by hand.
 
 Required:
 
 | Label | Colour |
 |---|---|
-| `release/ready` | `0e8a16` |
-| `release/blocked` | `b60205` |
 | `1-triage` | `FBCA04` |
 | `2-discussing` | `D876E3` |
 | `3-human-queue` | `1D76DB` |
@@ -257,7 +178,7 @@ Required:
 Optional: `area/ci`, `kind/bug`, `priority/p1` (all `ededed`), and GitHub's
 defaults.
 
-## 11. Enable issues
+## 8. Enable issues
 
 The issue templates in `.github/ISSUE_TEMPLATE/` only appear when issues are on.
 
@@ -278,13 +199,10 @@ gh api repos/{owner}/{repo}/actions/permissions
 gh api repos/{owner}/{repo}/actions/permissions/workflow
 gh api repos/{owner}/{repo}/branches --jq '.[].name'
 gh api repos/{owner}/{repo}/branches/main/protection --jq '.required_status_checks.contexts'
-gh api repos/{owner}/{repo}/branches/stable/protection --jq '.required_status_checks.contexts'
-gh api repos/{owner}/{repo}/rulesets --jq '.[].name'
 gh secret list --repo {owner}/{repo}
 ```
 
-Done when `main` and `stable` both exist and both require `validate`, the squash
-ruleset is active, `RENOVATE_TOKEN` is set, and a push to `main` that changes
+Done when `main` requires `validate`, `RENOVATE_TOKEN` is set, and a push to `main` that changes
 more than documentation produces a green `Build and Push Image` run and a
 `:stable-testing` image. Documentation-only pushes are skipped by `paths-ignore`.
 
@@ -299,10 +217,7 @@ more than documentation produces a green `Build and Push Image` run and a
   fine-grained; see the note in step 5. **"invalid or expired (HTTP 401)"** —
   the saved value is not a live token: blank, cut short, or replaced by a later
   regeneration.
-- **The promotion PR never opens** — `stable` does not exist (step 6).
-- **The promotion PR cannot merge** — `stable` requires an approval, or the
-  check name is not exactly `validate` (steps 7–8).
-- **The promotion PR is merged by hand** — expected on a personal repository. A
-  merge queue needs an organization, so enrollment is off.
-- **The release gate reports `release/blocked`** — the labels in step 10 are
-  missing, or the candidate image is unsigned.
+- **A pull request never shows `validate` as required** — the check name in
+  step 6 is not exactly `validate`.
+- **The first release fails at the signature check** — the candidate image is
+  unsigned; see the `ci` skill.

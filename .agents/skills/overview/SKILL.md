@@ -66,8 +66,8 @@ copying it:
 
 - `projectbluefin/common` — the shared runtime layer and the lifecycle label
   workflow
-- `projectbluefin/actions` — the reusable workflows for image build, promotion,
-  sync, PR validation, and Renovate
+- `projectbluefin/actions` — the reusable actions and workflows for image build,
+  PR validation, cleanup, and Renovate
 - `ublue-os/brew` — the Homebrew integration
 
 Changes stay in this repository. `ublue-os/*` is read-only.

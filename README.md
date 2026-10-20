@@ -82,7 +82,8 @@ alongside upstream's `default.preinstall`.
 - Git defaults and GitHub credentials through gh are system-wide
   (`/etc/gitconfig`); the dotfiles only add your name and email, and apply
   themselves at login.
-- The image rebuilds nightly, so baked-in RPMs pick up upstream releases.
+- The image rebuilds daily, so baked-in RPMs pick up upstream releases on
+  `:stable-testing`; a release carries them to `:stable`.
 
 ## Set up a machine
 
@@ -100,17 +101,18 @@ alongside upstream's `default.preinstall`.
 The published name is the repository name; three files carry it as a literal
 and `just test-contract` fails if they disagree (`Containerfile` twice,
 `Justfile`). [The `onboarding` skill](.agents/skills/onboarding/SKILL.md) covers
-the rest: Actions, auto-merge, the Renovate token, the `stable` branch, branch
-protection and labels. Claude Code in this repository reads it through
+the rest: Actions, auto-merge, the Renovate token, branch protection and
+labels. Claude Code in this repository reads it through
 `.claude/skills` (see [CLAUDE.md](CLAUDE.md)).
 
 ## What's included
 
 **Build system**
 
-- A build on every push to `main`, publishing `:stable-testing`
+- A build on every push to `main` and once a day, publishing `:stable-testing`
+- A dispatched release that promotes the tested digest to `:stable`
 - Renovate through `projectbluefin/actions`, updating pinned actions and image
-  digests every six hours
+  digests weekly
 - Images older than 90 days pruned automatically
 - Pull requests validated for shellcheck, hadolint, Brewfiles, Flatpaks,
   Justfiles, and Renovate config
@@ -142,19 +144,24 @@ those a given package belongs in.
 
 ## Releases
 
-| Branch   | Image tag         | Audience                       |
-| -------- | ----------------- | ------------------------------ |
-| `main`   | `:stable-testing` | Testers and release candidates |
-| `stable` | `:stable`         | Production                     |
+One long-lived branch, `main`; work lands on it from feature branches by PR
+([decision 0025](docs/decisions/0025-trunk-based-releases.md)).
 
-Merging to `main` publishes `:stable-testing`; the promotion PR that follows
-publishes `:stable` when merged. Promotion verifies the cosign signature on the
-testing image before it reports ready, and refuses to promote at all once `main`
-has moved past the commit the promotion PR was built from.
+| Image tag              | Moves when                          | Audience            |
+| ---------------------- | ----------------------------------- | ------------------- |
+| `:stable-testing`      | every push to `main`, and daily     | trying a change     |
+| `:stable`              | a release                           | the laptop          |
+| `:<version>`           | never: one per release              | pinning a machine   |
 
-> **Known gap:** the promotion gate checks the digest and the signature only. It
-> runs no end-to-end tests, so `release/ready` means "signed and unmodified",
-> not "functionally validated".
+To release, run **Actions → Release → Run workflow**. It verifies the cosign
+signature on the current `:stable-testing` digest, copies that same digest to
+`:stable` and `:<version>` (it never rebuilds), and records git tag
+`v<version>` with a GitHub Release holding the digest. Give it an earlier
+version to roll `:stable` back.
+
+> **Known gap:** the release checks the signature only. It runs no end-to-end
+> tests, so a release means "signed and unmodified", not "functionally
+> validated". Boot `:stable-testing` first.
 
 ## Image signing
 
@@ -167,8 +174,8 @@ cosign verify \
   ghcr.io/cpmorton/daily-driver-os:stable
 ```
 
-Unsigned images fail the promotion gate, so `main → stable` reports
-`release/blocked` until signing is restored.
+The release refuses an unsigned image, so `:stable` stays where it was until
+signing is restored.
 
 > **The laptop does not enforce this signature.** `projectbluefin/common`'s
 > `/etc/containers/policy.json` accepts any `docker` registry it doesn't name,

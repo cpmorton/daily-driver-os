@@ -20,14 +20,14 @@ daily-user model ([decision 0005](decisions/0005-accounts-and-access.md),
 put the multi-user path behind a flag/toggle so it can come back cleanly.
 Deliverable: name where that flag lives and what it switches.
 
-### 2.2 Release model — analyze before changing
+### 2.2 Release model — done
 
-Hold the two-branch promote-and-sign model
-([decision 0014](decisions/0014-nightly-builds-and-release-channels.md),
-[0013](decisions/0013-image-signing.md)). Mort wants to analyze *why a fleet
-would want it* before any collapse. Do not drop branches or signing unprompted.
-Deliverable: a short written analysis (fleet value vs. solo overhead), then his
-call.
+Mort chose trunk-based releases on 2026-10-20: feature branches into `main`,
+and a dispatched release that promotes the signed, tested digest to `:stable`
+and records it as a git tag
+([decision 0025](decisions/0025-trunk-based-releases.md)). Signing stays
+([0013](decisions/0013-image-signing.md)). The `stable` branch is gone, and the
+four PR linters were folded into `pr-validation.yml` (13 workflows down to 7).
 
 ### 2.3 Build cadence — done in Wave 1
 

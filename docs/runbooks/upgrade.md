@@ -26,8 +26,9 @@ laptop.
 
 | Tag | Built from | Use |
 | --- | --- | --- |
-| `:stable` | promoted from `main` after the release gate | the laptop |
-| `:stable-testing` | every push to `main`, and nightly | trying a change first |
+| `:stable` | the **Release** workflow, promoting a signed `:stable-testing` digest | the laptop |
+| `:stable-testing` | every push to `main`, and daily | trying a change first |
+| `:<version>` | one per release, never moves | pinning a machine |
 
 ```bash
 sudo bootc switch ghcr.io/cpmorton/daily-driver-os:stable-testing   # and back to :stable
