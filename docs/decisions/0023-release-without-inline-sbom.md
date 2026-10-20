@@ -1,6 +1,6 @@
 # 0023. Stable releases carry a placeholder SBOM, not an inline Syft scan
 
-- **Status:** Accepted
+- **Status:** Superseded by [0025](0025-trunk-based-releases.md)
 - **Date:** 2026-09-25
 
 ## Context

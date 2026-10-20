@@ -88,12 +88,15 @@ Roll back by picking the previous entry in the GRUB menu, or:
 sudo bootc rollback && sudo systemctl reboot
 ```
 
-Two channels ([decision 0014](decisions/0014-nightly-builds-and-release-channels.md)):
-`:stable` is what the laptop follows; `:stable-testing` is every push to `main`
-plus the daily build, for trying a change first.
+Two channels ([decision 0025](decisions/0025-trunk-based-releases.md)):
+`:stable` is what the laptop follows, and it moves only when you run the
+**Release** workflow; `:stable-testing` is every push to `main` plus the daily
+build, for trying a change first. Each release also gets its own version tag,
+which a machine can pin to.
 
 ```bash
 sudo bootc switch ghcr.io/cpmorton/daily-driver-os:stable-testing   # and back to :stable
+sudo bootc switch ghcr.io/cpmorton/daily-driver-os:46.20261019      # pin one release
 ```
 
 More: **[runbooks/upgrade.md](runbooks/upgrade.md)**, **[runbooks/recover.md](runbooks/recover.md)**.

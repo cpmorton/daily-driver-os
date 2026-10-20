@@ -10,9 +10,9 @@
 #   - every [Flatpak Preinstall <app-id>] section must declare a Branch= key
 #   - every declared app-id must resolve on the flathub remote
 #
-# Single implementation of the flatpak validation contract; the CI workflow
-# (.github/workflows/validate-flatpaks.yml) and `just validate-flatpaks` are
-# thin callers. Mirrors the Brewfile contract in build/validate-brewfiles.sh.
+# Single implementation of the flatpak validation contract; the flatpaks job in
+# .github/workflows/pr-validation.yml and `just validate-flatpaks` are thin
+# callers. Mirrors the Brewfile contract in build/validate-brewfiles.sh.
 
 main() (
     set -euo pipefail

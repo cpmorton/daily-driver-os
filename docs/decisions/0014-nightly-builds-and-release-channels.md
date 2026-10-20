@@ -1,6 +1,6 @@
 # 0014. Nightly builds and finpilot's two-channel release
 
-- **Status:** Accepted
+- **Status:** Superseded by [0025](0025-trunk-based-releases.md)
 - **Date:** 2026-09-23
 
 ## Context

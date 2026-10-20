@@ -18,12 +18,12 @@ These hold for every change:
 
 ## Branches and releases
 
-`main` is the testing branch: pushes publish `:stable-testing`. `stable` is
-production, and it never rebuilds — `execute-release.yml` promotes the exact
-digest `main` already built. Promotion is `main` → `stable` through the
-auto-opened squash PR, and `stable` hotfixes sync back to `main`. `stable` takes
-no direct commits. The README owns the release table and the promotion gate's
-current limits.
+`main` is the only long-lived branch; work reaches it from feature branches by
+PR, and every push publishes `:stable-testing`. A release is a dispatch of
+`release.yml`: it promotes the exact signed digest `main` already built to
+`:stable` and a `:<version>` tag, never rebuilding, and records git tag
+`v<version>`. The README owns the release table and the release's current
+limits.
 
 ## Pull request comments
 

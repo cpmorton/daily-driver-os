@@ -177,7 +177,10 @@ need `homectl`).
 | --- | --- | --- |
 | `Containerfile` | Name; description and keywords; phases 70 and 75; the `/opt` step removed | [0009](decisions/0009-real-opt-usrlocal-root.md), [0015](decisions/0015-leave-upstream-files-alone.md) |
 | `Justfile` | Image name default; `ISO_IMAGE_TAG` override in `_build-bib` | Identity rename (`tests/contract/identity_test.bats`); [0016](decisions/0016-installer-built-in-ci.md) |
-| `.github/workflows/build-image.yml` | Nightly schedule | [0014](decisions/0014-nightly-builds-and-release-channels.md) |
+| `.github/workflows/build-image.yml` | Daily schedule; no bare `:testing` tag; release comments | [0014](decisions/0014-nightly-builds-and-release-channels.md), [0025](decisions/0025-trunk-based-releases.md) |
+| `.github/workflows/pr-validation.yml` | Absorbs the four `validate-*` linters as path-gated jobs; promotion tree check removed | [0025](decisions/0025-trunk-based-releases.md) |
+| `.github/workflows/unit-tests.yml` | Runs for `main` only | [0025](decisions/0025-trunk-based-releases.md) |
+| `execute-release.yml`, `promote-main-to-stable.yml`, `sync-stable-to-main.yml`, `validate-{brewfiles,flatpaks,justfiles,renovate}.yml`, `tests/template/execute-release_test.bats` | Deleted: no `stable` branch; linters folded into `pr-validation.yml` | [0025](decisions/0025-trunk-based-releases.md) |
 | `iso/iso.toml` | `rootpw --lock` in the kickstart | [0005](decisions/0005-accounts-and-access.md) |
 | `README.md` | Rewritten top half; upstream reference sections kept | |
 | `artifacthub-repo.yml` | Deleted: not publishing to Artifact Hub | |
@@ -187,6 +190,7 @@ New repository files outside the image:
 | File | Does | Why |
 | --- | --- | --- |
 | `.github/workflows/build-iso.yml` | Builds the installer ISO on demand and uploads it as an artifact | [0016](decisions/0016-installer-built-in-ci.md) |
+| `.github/workflows/release.yml`, `tests/template/release_test.bats` | Promotes the signed `:stable-testing` digest to `:stable` and a version tag, and records the GitHub Release | [0025](decisions/0025-trunk-based-releases.md) |
 | `.gitattributes` | LF line endings on every checkout, Windows included | [0016](decisions/0016-installer-built-in-ci.md) |
 | `.gitignore` (additions) | Refuses defaults files and hash files | [0020](decisions/0020-machine-defaults-on-the-esp.md) |
 | `tools/windows/Set-DailyDriverDefaults.ps1` | Writes this machine's defaults to its EFI partition from Windows (PowerShell 5.1) | [0020](decisions/0020-machine-defaults-on-the-esp.md) |
