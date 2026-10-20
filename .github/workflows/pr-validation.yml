@@ -24,6 +24,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       # The repository's shell scripts are the *.sh files git tracks — the same
       # definition `just lint` uses. validate-pr word-splits this input into
@@ -56,10 +58,12 @@ jobs:
       flatpaks: ${{ steps.diff.outputs.flatpaks }}
       justfiles: ${{ steps.diff.outputs.justfiles }}
       renovate: ${{ steps.diff.outputs.renovate }}
+      workflows: ${{ steps.diff.outputs.workflows }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Match changed paths
@@ -80,6 +84,7 @@ jobs:
             echo "flatpaks=$(match '^(custom/flatpaks/|build/validate-flatpaks\.sh$|tests/contract/validate-flatpaks_test\.bats$)')"
             echo "justfiles=$(match '(\.just$|^Justfile$)')"
             echo "renovate=$(match '^\.github/(renovate\.json|workflows/renovate\.yml)$')"
+            echo "workflows=$(match '^\.github/(workflows/|zizmor\.ya?ml$)')"
           } | tee -a "${GITHUB_OUTPUT}"
 
   brewfiles:
@@ -93,6 +98,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Set up Homebrew
         uses: Homebrew/actions/setup-homebrew@d482da0e602890d3160aade42e72c8556103bf04 # main
@@ -130,6 +137,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       # The script adds the Flathub remote itself, --user and --if-not-exists,
       # so only the binary is needed here. Refresh the apt lists first: the
@@ -159,9 +168,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
 
       - name: Install just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          # renovate: datasource=github-releases depName=casey/just
+          just-version: "1.59.0"
 
       # `just check` is the single definition of this contract: it covers the
       # root Justfile and every .just file, so the workflow cannot drift from
@@ -179,3 +193,30 @@ jobs:
     permissions:
       contents: read
     uses: projectbluefin/actions/.github/workflows/reusable-validate-renovate.yml@209517dda44829f126e25da28f11245c34458ac3 # v1
+
+  # Static security audit of every workflow: template injection, persisted
+  # checkout credentials, unpinned tools, and (online, with the read-only job
+  # token) pinned SHAs that do not belong to the repository they claim, which
+  # is how a hijacked tag hides. Pulled from PyPI by exact version so Renovate
+  # tracks it, rather than through one more third-party action.
+  workflows:
+    name: Workflow security
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Audit workflows with zizmor
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # renovate: datasource=pypi depName=zizmor
+          ZIZMOR_VERSION: "1.30.1"
+        run: pipx run "zizmor==${ZIZMOR_VERSION}" --format=github .github/workflows/

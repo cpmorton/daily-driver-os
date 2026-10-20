@@ -99,6 +99,35 @@ jobs:
 
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # Renovate cannot age GHCR or Quay digests (they publish no release
+      # timestamps), so a bumped digest is checked here instead: each signed
+      # upstream image must carry its publisher's signature before anything is
+      # built on it. common signs keyless from its own repository's workflows;
+      # brew signs with ublue-os's key, copied from ublue-os/brew. The Fedora
+      # base is not checked: it is pinned by digest only. [VERIFY]
+      - name: Verify upstream image signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          pinned() {
+            sed -nE "s|^FROM (${1//./\\.}):[^@ ]+@(sha256:[0-9a-f]{64}).*|\\1@\\2|p" Containerfile
+          }
+          common=$(pinned ghcr.io/projectbluefin/common)
+          brew=$(pinned ghcr.io/ublue-os/brew)
+          [[ -n "${common}" && -n "${brew}" ]] || { echo "::error::Containerfile no longer pins common and brew by digest"; exit 1; }
+
+          cosign verify \
+            --certificate-identity-regexp '^https://github\.com/projectbluefin/common/\.github/workflows/' \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
+            "${common}" >/dev/null
+          cosign verify --key .github/cosign/ublue-os.pub "${brew}" >/dev/null
+          echo "Signatures verified: ${common} ${brew}"
 
       - name: Preflight
         id: preflight
@@ -257,14 +286,14 @@ jobs:
       - name: Build telemetry summary
         shell: bash
         run: |
-          IMAGE_SIZE=$(sudo podman image inspect "localhost/${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}" \
+          IMAGE_SIZE=$(sudo podman image inspect "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" \
             --format '{{.Size}}' 2>/dev/null || echo "0")
           IMAGE_SIZE_MB=$(( IMAGE_SIZE / 1024 / 1024 ))
-          LAYER_COUNT=$(sudo podman image inspect "localhost/${{ env.IMAGE_NAME }}:${{ env.DEFAULT_TAG }}" \
+          LAYER_COUNT=$(sudo podman image inspect "localhost/${IMAGE_NAME}:${DEFAULT_TAG}" \
             --format '{{len .RootFS.Layers}}' 2>/dev/null || echo "?")
 
           {
-            echo "## Build Telemetry: ${{ env.IMAGE_NAME }}"
+            echo "## Build Telemetry: ${IMAGE_NAME}"
             echo ""
             echo "**Image size (uncompressed):** ${IMAGE_SIZE_MB} MB"
             echo "**Layer count:** ${LAYER_COUNT}"

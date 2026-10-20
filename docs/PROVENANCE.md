@@ -22,8 +22,8 @@ In build order. A later layer wins where two write the same path.
 | --- | --- | --- | --- | --- |
 | 1 | Base OS | `quay.io/fedora-ostree-desktops/silverblue:44` | digest in `Containerfile`, bumped by Renovate | Fedora Silverblue: kernel, GNOME, systemd, podman, ~all RPMs |
 | 2 | `00-image-info.sh` | finpilot (upstream) | this repository | `os-release` identity, `/usr/share/ublue-os/image-info.json` |
-| 3 | `10-overlay.sh`: common | `ghcr.io/projectbluefin/common`, `system_files/shared/` only | digest in `Containerfile` | ~114 files: ujust, first-boot setup, uupd config, container trust policy, `%wheel` passwordless `bootc upgrade`, polkit rules |
-| 4 | `10-overlay.sh`: brew | `ghcr.io/ublue-os/brew` | digest in `Containerfile` | Homebrew tarball, `brew-setup`/`brew-update`/`brew-upgrade` units, shell integration |
+| 3 | `10-overlay.sh`: common | `ghcr.io/projectbluefin/common`, `system_files/shared/` only | digest in `Containerfile`, keyless signature verified in CI | ~114 files: ujust, first-boot setup, uupd config, container trust policy, `%wheel` passwordless `bootc upgrade`, polkit rules |
+| 4 | `10-overlay.sh`: brew | `ghcr.io/ublue-os/brew` | digest in `Containerfile`, signature verified in CI against `.github/cosign/ublue-os.pub` | Homebrew tarball, `brew-setup`/`brew-update`/`brew-upgrade` units, shell integration |
 | 5 | `10-overlay.sh`: seams | this repository, `custom/` | this repository | `custom/files/`, Brewfiles, ujust recipes, Flatpak preinstalls, `/etc/skel/.config` seeds, Flathub remote descriptor |
 | 6 | `20-packages-and-services.sh` | finpilot (upstream) | this repository | `just`, `gum`, `fzf`, `jq`; `uupd` from the `ublue-os/packages` COPR |
 | 7 | `70-daily-driver.sh` | this repository | this repository | Everything under "Packages" and "Changes made by build steps" below |
