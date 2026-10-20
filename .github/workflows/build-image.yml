@@ -5,11 +5,15 @@ name: Build and Push Image
 # main and publishes :stable-testing. release.yml promotes the exact signed
 # digest to :stable when a maintainer dispatches it; :stable is never rebuilt.
 #
-# Builds run on push to main and once daily; PR builds are disabled. A change to a
-# workflow the build depends on — build-image, release, unit tests — still
-# builds, so a break in it is caught. pr-validation.yml is PR linting only and
-# never affects the image.
+# Builds publish on push to main and once daily. A pull request gets the same
+# build without publishing (the `image-build` job), so a change that breaks the
+# image — a Renovate digest bump included — is caught before it reaches main.
+# A change to a workflow the build depends on — build-image, release, unit
+# tests — still builds. pr-validation.yml is PR linting only.
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
@@ -24,11 +28,10 @@ on:
     - cron: "0 14 * * *"
   workflow_dispatch:
 
+# Each job declares what it needs. The pull-request job gets read-only access,
+# so code under review never holds packages: write or a signing identity.
 permissions:
   contents: read
-  packages: write
-  id-token: write
-  attestations: write
 
 env:
   IMAGE_NAME: "${{ github.event.repository.name }}"
@@ -41,7 +44,7 @@ env:
   # No branch publishes :stable since decision 0025, so every build is a
   # :stable-testing candidate; release.yml is the only path to :stable.
   PRODUCTION_BRANCH: "stable"
-  REGISTRY_CACHE_WRITE: "1" # CI always writes the layer cache; local builds stay read-only
+  REGISTRY_CACHE_WRITE: "1" # main builds write the layer cache; PR and local builds stay read-only
   ENABLE_RECHUNKING: "false"
   RECHUNK_MAX_LAYERS: "128"
 
@@ -55,7 +58,9 @@ jobs:
     # A manual dispatch may select any ref. Limit it to the repository's default
     # branch so it cannot bypass the candidate-digest release path by rebuilding
     # and publishing from stable.
-    if: github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_dispatch' || github.ref_name == github.event.repository.default_branch)
     # 26.04 ships Podman 5.x, so setup-runner skips the resolute apt install
     # and its apt cache, which on 24.04 never saves: tar runs as the runner
     # user and cannot read apt's root-only lock and partial/. [VERIFY]
@@ -264,3 +269,76 @@ jobs:
             echo "**Image size (uncompressed):** ${IMAGE_SIZE_MB} MB"
             echo "**Layer count:** ${LAYER_COUNT}"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # The pull-request check: does this change still build? It never publishes,
+  # signs or writes a cache. A squash merge makes a new commit, so a PR image
+  # could never be the one main ships anyway; main rebuilds and publishes.
+  # It builds only when the PR touches an image input, so CI- and docs-only PRs
+  # don't each cost a full build, and it always reports, so it can be a
+  # required check without leaving those PRs waiting forever.
+  image-build:
+    name: image-build
+    if: github.event_name == 'pull_request'
+    # Keep in step with the build job's runner and setup;
+    # tests/template/build-image-pr_test.bats checks they match.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    steps:
+      - name: Prepare environment
+        run: |
+          echo "IMAGE_NAME=${IMAGE_NAME,,}" >> "${GITHUB_ENV}"
+          echo "DEFAULT_TAG=${DEFAULT_TAG}-testing" >> "${GITHUB_ENV}"
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the image can change
+        id: scope
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # The image's inputs: what the Containerfile copies or binds (build/,
+          # custom/), the Containerfile and Justfile themselves, and this
+          # workflow. Collected first: `git diff | grep -q` can SIGPIPE git,
+          # and pipefail would then read a real change as no change.
+          changed=$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")
+          inputs=$(grep -E '^(Containerfile|Justfile|build/|custom/|\.github/workflows/build-image\.yml$)' <<<"${changed}" || true)
+          if [[ -n "${inputs}" ]]; then
+            echo "build=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::notice::No image input changed, so the image cannot differ; nothing to build."
+            echo "build=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Setup runner
+        if: steps.scope.outputs.build == 'true'
+        uses: projectbluefin/actions/bootc-build/setup-runner@59f783ed76fd9d449ef6887a6649446801bd5434 # v1
+        with:
+          storage-backend: btrfs
+          native-overlay: "true"
+          update-podman: "true"
+          install-tools: '["just"]'
+
+      - name: Restore DNF cache
+        if: steps.scope.outputs.build == 'true'
+        uses: projectbluefin/actions/bootc-build/dnf-cache@59f783ed76fd9d449ef6887a6649446801bd5434 # v1
+        with:
+          action: restore
+          cache-name: ${{ env.IMAGE_NAME }}
+          cache-bust: ${{ hashFiles('**/Containerfile') }}
+
+      # REGISTRY_CACHE_WRITE=0: read the published layer cache, never write it,
+      # so an unmerged change cannot seed layers main later reuses.
+      - name: Build image
+        if: steps.scope.outputs.build == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_CACHE_WRITE: "0"
+        run: sudo -E "$(command -v just)" build "${IMAGE_NAME}" "${DEFAULT_TAG}"

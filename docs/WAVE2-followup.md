@@ -57,3 +57,28 @@ Not resolved yet. Work needed: decide whether Windows-default is a firmware
 boot-order choice or a GRUB-default change; design how the reimage entry is
 wired into GRUB; prove the `DDINSTALL`-as-permanent-reinstall path on hardware
 (it's currently **[VERIFY]**); and write the decision record for it.
+
+### 2.6 A test box that boots every candidate
+
+Mort's idea (2026-10-20): something that always runs the newest
+`:stable-testing`, boots it, runs smoke tests and reports back. This is the
+missing gate between "it built and is signed" and "release it": today a release
+means "signed and unmodified", not "functionally validated"
+([decision 0025](decisions/0025-trunk-based-releases.md)).
+
+Two shapes, cheapest first:
+
+- **A VM boot in CI.** After `build-image.yml` publishes, boot the image in a VM
+  on the runner and check that it reaches a login target, that the first-boot
+  units are healthy, and that `bootc status` reports the expected digest.
+  Check first whether the runner exposes KVM and what upstream
+  `projectbluefin/actions` already provides for this; don't assume either.
+- **A physical box (hardware in the loop).** A spare machine that follows
+  `:stable-testing`, runs `bootc upgrade` and reboots on a schedule, runs the
+  same smoke suite, and reports back somewhere CI or the release can read. This
+  catches what a VM can't (firmware, TPM2 unlock, GPU, suspend) and is the
+  strongest fleet/portfolio story.
+
+Either way, the result should become an input to `release.yml`: refuse, or at
+least warn about, a candidate the test box hasn't passed. That calls for a
+decision record when it lands.

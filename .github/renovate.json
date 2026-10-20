@@ -27,7 +27,7 @@
   ],
   "packageRules": [
     {
-      "description": "Automerge everything short of a major when checks pass. PR checks are shellcheck + hadolint and PR builds are disabled, so this merges without an image build ever having run — the deliberate trade for zero dependency toil.",
+      "description": "Automerge everything short of a major when checks pass. PR checks are shellcheck, hadolint, the unit tests and a non-publishing image build (image-build); GitHub auto-merge waits only for checks main requires, so image-build must be required for it to gate a bump.",
       "matchUpdateTypes": ["digest", "pin", "pinDigest", "patch", "minor"],
       "automerge": true,
       "automergeType": "pr",

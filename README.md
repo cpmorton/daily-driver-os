@@ -115,7 +115,8 @@ labels. Claude Code in this repository reads it through
   digests weekly
 - Images older than 90 days pruned automatically
 - Pull requests validated for shellcheck, hadolint, Brewfiles, Flatpaks,
-  Justfiles, and Renovate config
+  Justfiles, and Renovate config, plus a test build of the image that is never
+  published
 - Keyless OIDC signing on every published image
 
 **Runtime**

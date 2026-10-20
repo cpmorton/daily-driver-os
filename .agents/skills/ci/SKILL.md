@@ -12,7 +12,7 @@ description: >-
 
 | Workflow | Trigger | Does |
 |---|---|---|
-| `build-image.yml` | push to `main`, daily 14:00 UTC, dispatch | Builds, signs, and pushes `:stable-testing`. |
+| `build-image.yml` | push to `main`, daily 14:00 UTC, dispatch; pull request | Builds, signs, and pushes `:stable-testing`. On a pull request, the read-only `image-build` job builds without publishing. |
 | `release.yml` | dispatch | Promotes the signed `:stable-testing` digest to `:stable` and `:<version>`; records the GitHub Release. Never rebuilds. |
 | `pr-validation.yml` | pull request | The `validate` check (shellcheck, hadolint), plus Brewfiles, Flatpaks, Justfiles and Renovate config, each gated on the paths it checks. |
 | `unit-tests.yml` | push, pull request | The bats suite. |
@@ -69,15 +69,26 @@ onboarding steps.
 
 Automerge deliberately covers GitHub Actions SHA bumps, which reverses a guard
 upstream kept. Those SHAs run in jobs holding `packages: write`,
-`id-token: write`, and `secrets: inherit`, and PR builds are disabled, so a bump
-merges with only shellcheck, hadolint, and the test suite having run. Putting the
-guard back is one rule — `matchManagers: ["github-actions"]` with
+`id-token: write`, and `secrets: inherit`, so a bump merges once `image-build`
+has proven the image still builds — provided `main` requires that check, since
+GitHub's auto-merge waits only for required checks.
+Putting the guard back is one rule — `matchManagers: ["github-actions"]` with
 `automerge: false`.
+
+`image-build` builds only when a PR touches an image input (`Containerfile`,
+`Justfile`, `build/`, `custom/`, or `build-image.yml`); otherwise it skips the
+build and passes. It always reports, so it can be required without stranding
+CI- or docs-only PRs. Add a path there if the Containerfile ever copies
+something new. It holds
+only `contents: read` and builds with `REGISTRY_CACHE_WRITE=0`, so unmerged code
+never publishes, signs, or seeds the layer cache.
+`tests/template/build-image-pr_test.bats` guards those properties and keeps its
+runner and setup identical to the publishing job's.
 
 ## Making a change
 
 1. Branch from `main` and open a pull request against it.
-2. Wait for `validate` and the tests.
+2. Wait for `validate`, `image-build`, and the tests.
 3. Merge. `main` publishes `:stable-testing`.
 4. Boot `:stable-testing` if the change is risky.
 5. Run **Actions → Release** to publish `:stable`.

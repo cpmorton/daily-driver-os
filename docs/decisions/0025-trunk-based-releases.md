@@ -74,10 +74,13 @@ workflow for one administrator.
 
 ## Verification
 
-[VERIFY] The first dispatch: the run resolves the short revision label to a
-full commit through `gh api repos/{repo}/commits/<short>`, the version tag and
-`:stable` share one digest, `cosign verify` passes against `:stable`, and the
-GitHub Release lands on the right commit.
+Verified 2026-10-20 by the first dispatch
+([run 39422287739](https://github.com/cpmorton/daily-driver-os/actions/runs/39422287739)):
+it resolved the short revision label to the full commit `34aeeea…` through
+`gh api repos/{repo}/commits/<short>`, verified the cosign signature, promoted
+digest `sha256:368c9451…` to `:46.20261020` and `:stable`, and created
+[v46.20261020](https://github.com/cpmorton/daily-driver-os/releases/tag/v46.20261020)
+on that commit. A rollback dispatch (an earlier `version`) is still unexercised.
 
 ## Revisit when
 

@@ -120,15 +120,17 @@ open pull requests, so it needs to act as you.
 
 ## 6. Protect `main`
 
-Require the `validate` check, so nothing lands without passing shellcheck and
-hadolint.
+Require the `validate` and `image-build` checks, so nothing lands without
+passing shellcheck and hadolint and without the image still building. Renovate's
+auto-merge waits only for required checks, so `image-build` is what stops a
+digest bump that breaks the build.
 
 - **`gh`**:
 
   ```bash
   gh api -X PUT repos/{owner}/{repo}/branches/main/protection --input - <<'JSON'
   {
-    "required_status_checks": {"strict": false, "contexts": ["validate"]},
+    "required_status_checks": {"strict": false, "contexts": ["validate", "image-build"]},
     "enforce_admins": false,
     "required_pull_request_reviews": null,
     "restrictions": null
@@ -142,9 +144,10 @@ hadolint.
      rule**.
   3. **Branch name pattern**: `main`.
   4. Tick **Require status checks to pass before merging**.
-  5. In the search box, type `validate` and select the **validate** check. It
-     must be exactly `validate`. A check that has never run does not appear in
-     the list — push something first if it is missing.
+  5. In the search box, type `validate` and select the **validate** check, then
+     do the same for **image-build**. The names must match exactly. A check that
+     has never run does not appear in the list — open a pull request first if
+     one is missing.
   6. **Require a pull request before merging** is optional. The template's
      convention is that `main` takes no direct pushes, but the setting is what
      enforces it.
