@@ -105,8 +105,9 @@ place.
   `uvx zizmor@<version> .github/workflows/` (add `--offline` without a token).
   Every `actions/checkout` sets `persist-credentials: false`, and workflow
   expressions reach shell through `env:`, never inline in `run:`.
-- **Upstream signatures.** `build-image.yml` runs `cosign verify` on the
-  digests the Containerfile pins before it builds. `ghcr.io/projectbluefin/common`
+- **Upstream signatures.** `build/verify-upstream-signatures.sh` runs
+  `cosign verify` on the digests the Containerfile pins. Both `build-image.yml`
+  jobs run it before building, so a Renovate digest bump is checked on its PR. `ghcr.io/projectbluefin/common`
   signs keyless from its own repository's workflows. `ghcr.io/ublue-os/brew`
   signs with ublue-os's key, kept at `.github/cosign/ublue-os.pub` (from
   `ublue-os/brew`'s `cosign.pub`); if ublue-os rotates it, the build fails until
