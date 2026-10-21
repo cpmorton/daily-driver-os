@@ -112,11 +112,12 @@ labels. Claude Code in this repository reads it through
 - A build on every push to `main` and once a day, publishing `:stable-testing`
 - A dispatched release that promotes the tested digest to `:stable`
 - Renovate through `projectbluefin/actions`, updating pinned actions and image
-  digests weekly
+  digests weekly, with a 7-day cooldown on actions and CI tools
+- Upstream images' cosign signatures verified before every build
 - Images older than 90 days pruned automatically
 - Pull requests validated for shellcheck, hadolint, Brewfiles, Flatpaks,
-  Justfiles, and Renovate config, plus a test build of the image that is never
-  published
+  Justfiles, Renovate config, and workflow security (zizmor), plus a test
+  build of the image that is never published
 - Keyless OIDC signing on every published image
 
 **Runtime**
@@ -158,7 +159,8 @@ To release, run **Actions → Release → Run workflow**. It verifies the cosign
 signature on the current `:stable-testing` digest, copies that same digest to
 `:stable` and `:<version>` (it never rebuilds), and records git tag
 `v<version>` with a GitHub Release holding the digest. Give it an earlier
-version to roll `:stable` back.
+version to roll `:stable` back. It warns, without blocking, when the change
+behind the build is under two days old.
 
 > **Known gap:** the release checks the signature only. It runs no end-to-end
 > tests, so a release means "signed and unmodified", not "functionally

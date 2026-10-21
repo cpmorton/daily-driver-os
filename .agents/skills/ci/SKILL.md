@@ -14,7 +14,7 @@ description: >-
 |---|---|---|
 | `build-image.yml` | push to `main`, daily 14:00 UTC, dispatch; pull request | Builds, signs, and pushes `:stable-testing`. On a pull request, the read-only `image-build` job builds without publishing. |
 | `release.yml` | dispatch | Promotes the signed `:stable-testing` digest to `:stable` and `:<version>`; records the GitHub Release. Never rebuilds. |
-| `pr-validation.yml` | pull request | The `validate` check (shellcheck, hadolint), plus Brewfiles, Flatpaks, Justfiles and Renovate config, each gated on the paths it checks. |
+| `pr-validation.yml` | pull request | The `validate` check (shellcheck, hadolint), plus Brewfiles, Flatpaks, Justfiles, Renovate config and workflow security (zizmor), each gated on the paths it checks. |
 | `unit-tests.yml` | push, pull request | The bats suite. |
 | `build-iso.yml` | dispatch | The installer ISO for a published tag. |
 | `renovate.yml` | weekly, config change | Runs Renovate. |
@@ -84,6 +84,39 @@ only `contents: read` and builds with `REGISTRY_CACHE_WRITE=0`, so unmerged code
 never publishes, signs, or seeds the layer cache.
 `tests/template/build-image-pr_test.bats` guards those properties and keeps its
 runner and setup identical to the publishing job's.
+
+## Supply chain
+
+Pins make every upstream change a reviewable diff. These guards decide what the
+diff has to clear, and `tests/template/supply-chain_test.bats` keeps each one in
+place.
+
+- **Cooldown.** Renovate holds GitHub Actions, reusable workflows, and tools
+  pinned in workflow env vars (`github-tags`, `github-releases`, `pypi`) until a
+  release is 7 days old. Most hijacked releases are caught and pulled within
+  days. Container images can't be aged this way: GHCR and Quay publish no
+  release timestamps, and Renovate's default (`timestamp-required`) would hold
+  every image update forever, so never add `docker` to that rule. A force-pushed
+  tag still ages against its original release date, which is why the next guard
+  exists.
+- **zizmor** audits every workflow on a PR that touches one, online with the
+  job's read-only token, so it also catches a pinned SHA that doesn't belong to
+  the repository it claims. Pinned by exact version from PyPI. Locally:
+  `uvx zizmor@<version> .github/workflows/` (add `--offline` without a token).
+  Every `actions/checkout` sets `persist-credentials: false`, and workflow
+  expressions reach shell through `env:`, never inline in `run:`.
+- **Upstream signatures.** `build/verify-upstream-signatures.sh` runs
+  `cosign verify` on the digests the Containerfile pins. Both `build-image.yml`
+  jobs run it before building, so a Renovate digest bump is checked on its PR. `ghcr.io/projectbluefin/common`
+  signs keyless from its own repository's workflows. `ghcr.io/ublue-os/brew`
+  signs with ublue-os's key, kept at `.github/cosign/ublue-os.pub` (from
+  `ublue-os/brew`'s `cosign.pub`); if ublue-os rotates it, the build fails until
+  the file is updated. The Fedora base is pinned by digest only. [VERIFY]
+  whether it carries a signature worth checking.
+- **Soak warning.** `release.yml` warns, never blocks, when the candidate's
+  commit or the Containerfile's last pin change is under `SOAK_DAYS` (2) old.
+  The digest itself is always fresh because `main` rebuilds daily, so the
+  change behind it is what gets aged.
 
 ## Making a change
 

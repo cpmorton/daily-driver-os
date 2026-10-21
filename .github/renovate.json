@@ -21,7 +21,7 @@
       "description": "Track pinned tool versions in workflow env vars",
       "managerFilePatterns": ["/^\\.github/workflows/.+\\.yml$/"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\n\\s+\\w+: \"(?<currentValue>[^\"]+)\""
+        "# renovate: datasource=(?<datasource>[^\\s]+) depName=(?<depName>[^\\s]+)\\n\\s+[\\w-]+: \"(?<currentValue>[^\"]+)\""
       ]
     }
   ],
@@ -44,6 +44,12 @@
       ],
       "matchUpdateTypes": ["digest", "pinDigest", "pin"],
       "automerge": true
+    },
+    {
+      "description": "Cooldown for third-party code that runs in CI with a token: GitHub Actions, reusable workflows and the tools pinned in workflow env vars wait until a release is 7 days old, so a hijacked release is usually caught and pulled before it reaches us. Images cannot be aged this way (GHCR and Quay publish no release timestamps, and Renovate would then hold them forever), so build-image verifies their signatures instead. Runner labels (github-runners) are left out for the same reason.",
+      "matchDatasources": ["github-tags", "github-releases", "pypi"],
+      "matchUpdateTypes": ["major", "minor", "patch", "digest"],
+      "minimumReleaseAge": "7 days"
     },
     {
       "description": "A major crossing always waits for a human — never automerge one. Last matching rule wins, so keep this rule last.",
