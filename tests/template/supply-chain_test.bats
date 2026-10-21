@@ -34,16 +34,24 @@ step_body() {
 	[ "${checkouts}" -eq "${dropped}" ]
 }
 
-@test "supply chain: build verifies upstream signatures before building" {
-	verify="$(line_of "${BUILD}" '- name: Verify upstream image signatures')"
-	build="$(line_of "${BUILD}" '- name: Build image')"
-	[ -n "${verify}" ] && [ -n "${build}" ]
-	[ "${verify}" -lt "${build}" ]
-	body="$(step_body "${BUILD}" 'Verify upstream image signatures')"
-	grep -qF -- "--certificate-identity-regexp '^https://github\.com/projectbluefin/common/" <<<"${body}"
-	grep -qF -- '--key .github/cosign/ublue-os.pub' <<<"${body}"
-	run grep -qF 'continue-on-error' <<<"${body}"
+@test "supply chain: both build jobs verify upstream signatures before building" {
+	# Each "Build image" step must be preceded, in its own job, by the verify.
+	run awk '
+		/^  [a-z-]+:$/ { verified = 0 }
+		/run: build\/verify-upstream-signatures\.sh/ { verified = 1; seen++ }
+		/- name: Build image/ { builds++; if (!verified) bad++ }
+		END { exit !(builds == 2 && seen == 2 && bad == 0) }
+	' "${BUILD}"
+	[ "$status" -eq 0 ]
+	run grep -qF 'continue-on-error' <<<"$(step_body "${BUILD}" 'Verify upstream image signatures')"
 	[ "$status" -ne 0 ]
+}
+
+@test "supply chain: the verify script pins each signer" {
+	script="${REPO_ROOT}/build/verify-upstream-signatures.sh"
+	grep -qF -- "--certificate-identity-regexp '^https://github\.com/projectbluefin/common/" "${script}"
+	grep -qF -- '--key "${UBLUE_KEY}"' "${script}"
+	grep -qF -- 'UBLUE_KEY="${REPO_ROOT}/.github/cosign/ublue-os.pub"' "${script}"
 }
 
 @test "supply chain: the ublue-os key is a public key" {
