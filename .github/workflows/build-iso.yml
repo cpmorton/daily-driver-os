@@ -30,7 +30,7 @@ jobs:
     name: Build ISO
     # Same runner and setup as build-image.yml: setup-runner frees disk and
     # provides a btrfs-backed container store large enough for image + ISO.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 120
     steps:
       - name: Checkout
