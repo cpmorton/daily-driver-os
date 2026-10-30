@@ -44,6 +44,9 @@ jobs:
       # Scoped to this repository, not the owner: `[^/]+` after the owner
       # would accept a signature minted by any repository in the org.
       IDENTITY_REGEXP: ^https://github\.com/${{ github.repository }}/\.github/workflows/
+      # How long a change should sit on :stable-testing before it ships. Below
+      # this the release still runs; it only warns.
+      SOAK_DAYS: "2"
     steps:
       - name: Prepare environment
         shell: bash
@@ -54,7 +57,9 @@ jobs:
 
       - name: Log in to GHCR
         shell: bash
-        run: echo "${GH_TOKEN}" | skopeo login ghcr.io --username "${{ github.actor }}" --password-stdin
+        env:
+          ACTOR: ${{ github.actor }}
+        run: echo "${GH_TOKEN}" | skopeo login ghcr.io --username "${ACTOR}" --password-stdin
 
       # Resolve the tag exactly once. Every later step works on this digest, so
       # a build that lands mid-release cannot swap the candidate.
@@ -82,6 +87,28 @@ jobs:
             echo "version=${version}"
             echo "sha=${sha}"
           } >> "${GITHUB_OUTPUT}"
+
+      # main rebuilds daily, so the digest itself is always fresh. What can be
+      # unsoaked is the change behind it: the commit, or a bumped upstream pin
+      # in the Containerfile. This warns and never blocks, by choice.
+      - name: Warn on an unsoaked change
+        shell: bash
+        env:
+          SHA: ${{ steps.candidate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          now=$(date +%s)
+          age_days() { echo $(( (now - $(date -d "$1" +%s)) / 86400 )); }
+
+          committed=$(gh api "repos/${REPO}/commits/${SHA}" --jq '.commit.committer.date')
+          pinned=$(gh api "repos/${REPO}/commits?sha=${SHA}&path=Containerfile&per_page=1" --jq '.[0].commit.committer.date // empty')
+
+          if (( $(age_days "${committed}") < SOAK_DAYS )); then
+            echo "::warning::Commit ${SHA:0:7} landed ${committed}, under ${SOAK_DAYS} days ago; it has had little time on :stable-testing."
+          fi
+          if [[ -n "${pinned}" ]] && (( $(age_days "${pinned}") < SOAK_DAYS )); then
+            echo "::warning::The Containerfile's upstream pins changed ${pinned}, under ${SOAK_DAYS} days ago."
+          fi
 
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
