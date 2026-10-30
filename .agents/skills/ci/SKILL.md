@@ -105,6 +105,9 @@ place.
   `uvx zizmor@<version> .github/workflows/` (add `--offline` without a token).
   Every `actions/checkout` sets `persist-credentials: false`, and workflow
   expressions reach shell through `env:`, never inline in `run:`.
+  `.github/zizmor.yml` disables only `ref-version-mismatch`: our pins carry
+  floating comments (`# v1`, `# main`) that upstream moves between Renovate
+  runs, so it failed on ordinary drift. Keep `impostor-commit` on.
 - **Upstream signatures.** `build/verify-upstream-signatures.sh` runs
   `cosign verify` on the digests the Containerfile pins. Both `build-image.yml`
   jobs run it before building, so a Renovate digest bump is checked on its PR. `ghcr.io/projectbluefin/common`

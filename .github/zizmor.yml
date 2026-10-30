@@ -1,0 +1,9 @@
+# zizmor configuration, read by the Workflow security job in pr-validation.yml.
+rules:
+  # Our actions are pinned to a SHA with a floating ref comment (`# v1`,
+  # `# main`), which Renovate keeps current. Upstream moves those refs between
+  # Renovate runs, and the 7-day cooldown widens that gap, so this audit would
+  # fail on ordinary drift. impostor-commit still proves each SHA belongs to
+  # the repository it claims.
+  ref-version-mismatch:
+    disable: true
