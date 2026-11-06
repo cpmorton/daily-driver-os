@@ -64,6 +64,16 @@ UTC). It pins GitHub Actions to SHAs and updates image digests. The policy lives
 in `.github/renovate.json`: updates below a major automerge once checks pass;
 majors wait for a pull request.
 
+A Fedora base major (`silverblue:N` to `N+1`) is not a normal major: Renovate
+offers the next number as soon as the tag exists, which is months before that
+release ships, so `N+1` is Rawhide. Merge it only after the Fedora release is
+GA (check the release schedule). Rawhide tags are also pruned and re-pushed,
+so a pinned Rawhide digest eventually disappears: the build fails with
+`manifest unknown` and Renovate logs "Could not determine new digest". That is
+how #6 (44 to 46, merged 2026-10-18 while 45 was still in beta) put a
+Rawhide base on `:stable`. A base `FROM` without a digest is accepted; the
+`config:best-practices` pinDigests rule pins it on the next run.
+
 Renovate needs the `RENOVATE_TOKEN` secret and auto-merge enabled. Both are
 onboarding steps.
 

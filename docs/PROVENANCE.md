@@ -20,7 +20,7 @@ In build order. A later layer wins where two write the same path.
 
 | # | Layer | Source | Pinned by | Adds |
 | --- | --- | --- | --- | --- |
-| 1 | Base OS | `quay.io/fedora-ostree-desktops/silverblue:44` | digest in `Containerfile`, bumped by Renovate | Fedora Silverblue: kernel, GNOME, systemd, podman, ~all RPMs |
+| 1 | Base OS | `quay.io/fedora-ostree-desktops/silverblue:45` | digest in `Containerfile`, bumped by Renovate | Fedora Silverblue: kernel, GNOME, systemd, podman, ~all RPMs |
 | 2 | `00-image-info.sh` | finpilot (upstream) | this repository | `os-release` identity, `/usr/share/ublue-os/image-info.json` |
 | 3 | `10-overlay.sh`: common | `ghcr.io/projectbluefin/common`, `system_files/shared/` only | digest in `Containerfile`, keyless signature verified in CI | ~114 files: ujust, first-boot setup, uupd config, container trust policy, `%wheel` passwordless `bootc upgrade`, polkit rules |
 | 4 | `10-overlay.sh`: brew | `ghcr.io/ublue-os/brew` | digest in `Containerfile`, signature verified in CI against `.github/cosign/ublue-os.pub` | Homebrew tarball, `brew-setup`/`brew-update`/`brew-upgrade` units, shell integration |
