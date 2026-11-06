@@ -20,6 +20,13 @@ description: >-
 | `renovate.yml` | weekly, config change | Runs Renovate. |
 | `clean.yml` | weekly | Deletes images older than 90 days, keeping the newest seven tagged. |
 
+Every job names its runner (`ubuntu-26.04`, or `ubuntu-24.04` for
+`validate`), never `ubuntu-latest`. When `latest` moved to 26.04 in November
+2026, `validate` broke without warning: upstream's `validate-pr` installs
+`shellcheck=0.9.0-1`, which exists only on 24.04. Pinned labels make a runner
+move a reviewed Renovate PR instead. Before moving `validate`, check that
+`validate-pr` no longer pins a noble package.
+
 Most steps call reusable actions or workflows in `projectbluefin/actions`.
 `release.yml` is the exception: its verify-then-copy core is plain `skopeo` and
 `cosign`, owned here ([0025](../../../docs/decisions/0025-trunk-based-releases.md)).
