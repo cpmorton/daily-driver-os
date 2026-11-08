@@ -32,7 +32,7 @@ Full on-ramp: **[docs/GETTING_STARTED.md](docs/GETTING_STARTED.md)**. In short:
 
 ## What makes this raptor different
 
-Based on `quay.io/fedora-ostree-desktops/silverblue:44` plus
+Based on `quay.io/fedora-ostree-desktops/silverblue:45` plus
 `projectbluefin/common` and `ublue-os/brew`, as upstream finpilot is.
 
 ### Added packages (build time)

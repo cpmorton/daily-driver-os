@@ -17,7 +17,10 @@ permissions: {}
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    # 24.04, not latest: validate-pr installs `shellcheck=0.9.0-1`, a noble
+    # package that 26.04 doesn't carry. ubuntu-latest became 26.04 in
+    # November 2026 and broke this job; move it once upstream drops the pin.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -49,7 +52,7 @@ jobs:
   # diff against its merge base, matched per linter.
   changes:
     name: Detect what changed
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: read
@@ -91,7 +94,7 @@ jobs:
     name: Brewfiles
     needs: changes
     if: needs.changes.outputs.brewfiles == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -161,7 +164,7 @@ jobs:
     name: Justfiles
     needs: changes
     if: needs.changes.outputs.justfiles == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -203,7 +206,7 @@ jobs:
     name: Workflow security
     needs: changes
     if: needs.changes.outputs.workflows == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read

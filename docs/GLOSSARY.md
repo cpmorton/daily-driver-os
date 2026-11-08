@@ -14,7 +14,7 @@ upstream source on 2026-09-23; the ecosystem moves fast, so the
 **Silverblue**
 : The GNOME member of the Atomic Desktops (Kinoite is KDE). Formerly "Fedora
   Atomic Workstation", renamed in 2018. This image's base is
-  `quay.io/fedora-ostree-desktops/silverblue:44`, pinned by digest in the
+  `quay.io/fedora-ostree-desktops/silverblue:45`, pinned by digest in the
   `Containerfile` and bumped by Renovate.
 
 **OSTree**
