@@ -20,7 +20,7 @@ jobs:
     # 24.04, not latest: validate-pr installs `shellcheck=0.9.0-1`, a noble
     # package that 26.04 doesn't carry. ubuntu-latest became 26.04 in
     # November 2026 and broke this job; move it once upstream drops the pin.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
