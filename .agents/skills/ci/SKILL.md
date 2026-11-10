@@ -21,7 +21,9 @@ description: >-
 | `clean.yml` | weekly | Deletes images older than 90 days, keeping the newest seven tagged. |
 
 Every job names its runner (`ubuntu-26.04`, or `ubuntu-24.04` for
-`validate`), never `ubuntu-latest`. When `latest` moved to 26.04 in November
+`validate` and `build-iso`), never `ubuntu-latest`. `build-iso` stays on
+24.04 because osbuild can't mount `/dev` in its build root on 26.04; see the
+comment in `build-iso.yml`. When `latest` moved to 26.04 in November
 2026, `validate` broke without warning: upstream's `validate-pr` installs
 `shellcheck=0.9.0-1`, which exists only on 24.04. Pinned labels make a runner
 move a reviewed Renovate PR instead. Before moving `validate`, check that
